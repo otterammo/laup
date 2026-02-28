@@ -28,6 +28,7 @@ interface AiderYamlConfig {
 export class AiderAdapter implements ToolAdapter {
   readonly toolId = "aider";
   readonly displayName = "Aider";
+  readonly category = "cli" as const;
 
   renderConfig(doc: CanonicalInstruction): string {
     const overrides = doc.frontmatter.tools?.aider as AiderOverrides | undefined;

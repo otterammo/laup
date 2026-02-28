@@ -28,6 +28,7 @@ const { values: flags, positionals } = parseArgs({
     inherit: { type: "boolean", short: "i", default: false },
     "stop-at": { type: "string" },
     "expand-includes": { type: "boolean", short: "e", default: false },
+    category: { type: "string", short: "c" },
     team: { type: "string" },
     "org-path": { type: "string" },
     "teams-dir": { type: "string" },
@@ -48,8 +49,9 @@ Commands:
 Options for sync:
   --source, -s       Path to canonical instruction file (required)
   --tools, -t        Comma-separated tool IDs (default: all registered adapters)
+  --category, -c     Filter tools by category: ide, cli, agent, other (CONF-015)
   --output-dir, -o   Target directory for output files (default: source file directory)
-  --dry-run          Preview without writing any files
+  --dry-run          Preview rendered output without writing files (CONF-016)
   --inherit, -i      Load and merge parent directory instruction files (CONF-005)
   --stop-at          Stop hierarchy traversal at this directory
   --expand-includes, -e  Expand @include directives before syncing (CONF-006)
@@ -95,7 +97,7 @@ if (command === "sync") {
   }
 
   const toolsArg = flags.tools;
-  const toolIds = toolsArg ? toolsArg.split(",").map((t) => t.trim()) : [];
+  const categoryArg = flags.category;
   const outputDir = flags["output-dir"];
   const dryRun = flags["dry-run"] ?? false;
   const mergeScopes = flags["merge-scopes"] ?? false;
@@ -106,7 +108,30 @@ if (command === "sync") {
   const orgPath = flags["org-path"];
   const teamsDir = flags["teams-dir"];
 
-  const engine = new SyncEngine(ALL_ADAPTERS);
+  // Filter adapters by category if specified (CONF-015)
+  let adapters = ALL_ADAPTERS;
+  if (categoryArg) {
+    const validCategories = ["ide", "cli", "agent", "other"];
+    if (!validCategories.includes(categoryArg)) {
+      console.error(
+        `Error: Invalid category "${categoryArg}". Valid: ${validCategories.join(", ")}`,
+      );
+      process.exit(1);
+    }
+    adapters = ALL_ADAPTERS.filter((a) => (a.category ?? "other") === categoryArg);
+    if (adapters.length === 0) {
+      console.error(`Error: No adapters found for category "${categoryArg}"`);
+      process.exit(1);
+    }
+    console.log(
+      `Filtering by category: ${categoryArg} (${adapters.map((a) => a.toolId).join(", ")})`,
+    );
+  }
+
+  // Then filter by specific tool IDs if also specified
+  const toolIds = toolsArg ? toolsArg.split(",").map((t) => t.trim()) : [];
+
+  const engine = new SyncEngine(adapters);
 
   let results: SyncResult[];
   try {
@@ -145,12 +170,34 @@ if (command === "sync") {
       doc = { ...doc, body: includeResult.content };
     }
 
+    // Preview mode: show rendered content without writing (CONF-016)
+    if (dryRun) {
+      const previews = engine.preview(doc, toolIds);
+      let hasError = false;
+
+      console.log("\n=== PREVIEW (dry run — no files written) ===\n");
+
+      for (const preview of previews) {
+        if (preview.success) {
+          console.log(`── ${preview.tool} ──────────────────────────────────────`);
+          for (const content of preview.content) {
+            console.log(content);
+            console.log("");
+          }
+        } else {
+          console.error(`✗ ${preview.tool}: ${preview.error}`);
+          hasError = true;
+        }
+      }
+
+      process.exit(hasError ? 1 : 0);
+    }
+
     // Sync the processed document
     results = engine.syncDocument({
       document: doc,
       tools: toolIds,
       outputDir: outputDir ? resolve(outputDir) : dirname(resolve(source)),
-      dryRun,
     });
   } catch (err) {
     console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
@@ -160,12 +207,8 @@ if (command === "sync") {
   let hasError = false;
   for (const result of results) {
     if (result.success) {
-      if (dryRun || result.paths.length === 0) {
-        console.log(`  ✓ ${result.tool}: (dry run — no files written)`);
-      } else {
-        for (const p of result.paths) {
-          console.log(`  ✓ ${result.tool}: wrote ${p}`);
-        }
+      for (const p of result.paths) {
+        console.log(`  ✓ ${result.tool}: wrote ${p}`);
       }
     } else {
       console.error(`  ✗ ${result.tool}: ${result.error}`);

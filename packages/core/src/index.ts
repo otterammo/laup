@@ -1,4 +1,4 @@
-export type { ToolAdapter } from "./adapter.js";
+export type { ToolAdapter, ToolCategory } from "./adapter.js";
 export type { HierarchyLoadResult, HierarchyOptions } from "./hierarchy.js";
 export { findRootInstruction, loadHierarchy } from "./hierarchy.js";
 export type { IncludeOptions, IncludeResult } from "./include.js";

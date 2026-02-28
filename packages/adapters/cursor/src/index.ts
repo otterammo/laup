@@ -14,6 +14,7 @@ const GENERATED_HEADER = "laup:generated — do not edit directly, edit laup.md 
 export class CursorAdapter implements ToolAdapter {
   readonly toolId = "cursor";
   readonly displayName = "Cursor";
+  readonly category = "ide" as const;
 
   renderLegacy(doc: CanonicalInstruction): string {
     const lines = [`<!-- ${GENERATED_HEADER} -->`, "", doc.body];

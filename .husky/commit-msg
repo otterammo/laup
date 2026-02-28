@@ -1,0 +1,8 @@
+commit_regex='^(feat|fix|docs|style|refactor|test|chore|ci|perf|revert)(\(.+\))?: .{1,100}$'
+if ! grep -qE "$commit_regex" "$1"; then
+  echo "ERROR: Commit message must follow conventional commits format."
+  echo "  Examples: feat(core): add canonical schema parser"
+  echo "            fix(cli): handle missing source file"
+  echo "  Types: feat fix docs style refactor test chore ci perf revert"
+  exit 1
+fi

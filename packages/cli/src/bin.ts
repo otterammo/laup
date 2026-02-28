@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import { aiderAdapter } from "@laup/aider";
 import { claudeCodeAdapter } from "@laup/claude-code";
 import type { SyncResult } from "@laup/config-hub";
-import { SyncEngine } from "@laup/config-hub";
+import { formatDiff, SyncEngine } from "@laup/config-hub";
 import {
   loadHierarchy,
   loadScopes,
@@ -24,6 +24,7 @@ const { values: flags, positionals } = parseArgs({
     tools: { type: "string", short: "t" },
     "output-dir": { type: "string", short: "o" },
     "dry-run": { type: "boolean", default: false },
+    diff: { type: "boolean", short: "d", default: false },
     "merge-scopes": { type: "boolean", short: "m", default: false },
     inherit: { type: "boolean", short: "i", default: false },
     "stop-at": { type: "string" },
@@ -52,6 +53,7 @@ Options for sync:
   --category, -c     Filter tools by category: ide, cli, agent, other (CONF-015)
   --output-dir, -o   Target directory for output files (default: source file directory)
   --dry-run          Preview rendered output without writing files (CONF-016)
+  --diff, -d         Show diff against existing files (with --dry-run) (CONF-020)
   --inherit, -i      Load and merge parent directory instruction files (CONF-005)
   --stop-at          Stop hierarchy traversal at this directory
   --expand-includes, -e  Expand @include directives before syncing (CONF-006)
@@ -100,6 +102,7 @@ if (command === "sync") {
   const categoryArg = flags.category;
   const outputDir = flags["output-dir"];
   const dryRun = flags["dry-run"] ?? false;
+  const showDiff = flags.diff ?? false;
   const mergeScopes = flags["merge-scopes"] ?? false;
   const inherit = flags.inherit ?? false;
   const expandIncludes = flags["expand-includes"] ?? false;
@@ -172,21 +175,56 @@ if (command === "sync") {
 
     // Preview mode: show rendered content without writing (CONF-016)
     if (dryRun) {
-      const previews = engine.preview(doc, toolIds);
+      const targetDir = outputDir ? resolve(outputDir) : dirname(resolve(source));
       let hasError = false;
 
-      console.log("\n=== PREVIEW (dry run — no files written) ===\n");
+      if (showDiff) {
+        // Diff mode: show what would change (CONF-020)
+        const diffs = engine.previewWithDiff(doc, targetDir, toolIds);
 
-      for (const preview of previews) {
-        if (preview.success) {
-          console.log(`── ${preview.tool} ──────────────────────────────────────`);
-          for (const content of preview.content) {
-            console.log(content);
-            console.log("");
+        console.log("\n=== DIFF PREVIEW (dry run — no files written) ===\n");
+
+        for (const result of diffs) {
+          if (result.success) {
+            for (const file of result.files) {
+              const status = file.exists
+                ? file.diff.hasChanges
+                  ? "MODIFIED"
+                  : "UNCHANGED"
+                : "NEW";
+              console.log(`── ${result.tool}: ${file.path} [${status}] ──`);
+
+              if (!file.exists) {
+                console.log("(new file will be created)");
+              } else if (file.diff.hasChanges) {
+                console.log(formatDiff(file.diff));
+              } else {
+                console.log("(no changes)");
+              }
+              console.log("");
+            }
+          } else {
+            console.error(`✗ ${result.tool}: ${result.error}`);
+            hasError = true;
           }
-        } else {
-          console.error(`✗ ${preview.tool}: ${preview.error}`);
-          hasError = true;
+        }
+      } else {
+        // Standard preview: show full rendered content
+        const previews = engine.preview(doc, toolIds);
+
+        console.log("\n=== PREVIEW (dry run — no files written) ===\n");
+
+        for (const preview of previews) {
+          if (preview.success) {
+            console.log(`── ${preview.tool} ──────────────────────────────────────`);
+            for (const content of preview.content) {
+              console.log(content);
+              console.log("");
+            }
+          } else {
+            console.error(`✗ ${preview.tool}: ${preview.error}`);
+            hasError = true;
+          }
         }
       }
 

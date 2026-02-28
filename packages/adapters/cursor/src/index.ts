@@ -63,6 +63,10 @@ export class CursorAdapter implements ToolAdapter {
 
     return written;
   }
+
+  getOutputPaths(targetDir: string): string[] {
+    return [join(targetDir, ".cursorrules"), join(targetDir, ".cursor", "rules", "laup.mdc")];
+  }
 }
 
 export const cursorAdapter = new CursorAdapter();

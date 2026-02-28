@@ -80,6 +80,10 @@ export class AiderAdapter implements ToolAdapter {
 
     return [configPath, conventionsPath];
   }
+
+  getOutputPaths(targetDir: string): string[] {
+    return [join(targetDir, ".aider.conf.yml"), join(targetDir, CONVENTIONS_FILE)];
+  }
 }
 
 export const aiderAdapter = new AiderAdapter();

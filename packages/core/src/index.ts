@@ -1,4 +1,10 @@
 export type { ToolAdapter } from "./adapter.js";
+export type { ImportFormat, ImportResult } from "./import.js";
+export {
+  detectFormat,
+  importDocument,
+  serializeCanonical,
+} from "./import.js";
 export type { FieldIssue } from "./parse.js";
 export { ParseError, parseCanonical, parseCanonicalString } from "./parse.js";
 export type { CanonicalInstruction, Frontmatter, ToolOverrides } from "./schema.js";

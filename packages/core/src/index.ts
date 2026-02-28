@@ -24,6 +24,7 @@ export {
 } from "./skill-renderer.js";
 export type {
   Skill,
+  SkillDeprecation,
   SkillMetadata,
   SkillParameter,
   SkillParameterType,
@@ -32,8 +33,11 @@ export type {
   SkillValidationResult,
 } from "./skill-schema.js";
 export {
+  getDeprecationNotice,
+  isSkillDeprecated,
   parseSkill,
   renderSkillPrompt,
+  SkillDeprecationSchema,
   SkillMetadataSchema,
   SkillParameterSchema,
   SkillParameterTypeSchema,

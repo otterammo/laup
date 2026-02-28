@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseSkill, renderSkillPrompt, type Skill, validateSkill } from "../skill-schema.js";
+import {
+  getDeprecationNotice,
+  isSkillDeprecated,
+  parseSkill,
+  renderSkillPrompt,
+  type Skill,
+  validateSkill,
+} from "../skill-schema.js";
 
 describe("skill-schema", () => {
   const validSkill: Skill = {
@@ -186,6 +193,86 @@ prompt: Hello {{name}}
 
       const result = renderSkillPrompt(skill, { a: "X", b: "Y" });
       expect(result).toBe("X and Y together: XY");
+    });
+  });
+
+  describe("deprecation (SKILL-012)", () => {
+    it("isSkillDeprecated returns false for non-deprecated skill", () => {
+      expect(isSkillDeprecated(validSkill)).toBe(false);
+    });
+
+    it("isSkillDeprecated returns true for deprecated skill", () => {
+      const deprecatedSkill: Skill = {
+        ...validSkill,
+        deprecation: { deprecated: true },
+      };
+      expect(isSkillDeprecated(deprecatedSkill)).toBe(true);
+    });
+
+    it("getDeprecationNotice returns null for non-deprecated skill", () => {
+      expect(getDeprecationNotice(validSkill)).toBeNull();
+    });
+
+    it("getDeprecationNotice returns basic notice", () => {
+      const deprecatedSkill: Skill = {
+        ...validSkill,
+        deprecation: { deprecated: true },
+      };
+      const notice = getDeprecationNotice(deprecatedSkill);
+      expect(notice).toContain("DEPRECATED");
+      expect(notice).toContain("code-review");
+    });
+
+    it("getDeprecationNotice includes message", () => {
+      const deprecatedSkill: Skill = {
+        ...validSkill,
+        deprecation: {
+          deprecated: true,
+          message: "This skill has been superseded.",
+        },
+      };
+      const notice = getDeprecationNotice(deprecatedSkill);
+      expect(notice).toContain("This skill has been superseded");
+    });
+
+    it("getDeprecationNotice includes replacement", () => {
+      const deprecatedSkill: Skill = {
+        ...validSkill,
+        deprecation: {
+          deprecated: true,
+          replacement: "better/code-review",
+        },
+      };
+      const notice = getDeprecationNotice(deprecatedSkill);
+      expect(notice).toContain("better/code-review");
+      expect(notice).toContain("instead");
+    });
+
+    it("getDeprecationNotice includes removeBy date", () => {
+      const deprecatedSkill: Skill = {
+        ...validSkill,
+        deprecation: {
+          deprecated: true,
+          removeBy: "2026-12-31",
+        },
+      };
+      const notice = getDeprecationNotice(deprecatedSkill);
+      expect(notice).toContain("2026-12-31");
+      expect(notice).toContain("removed");
+    });
+
+    it("validates deprecation schema", () => {
+      const result = validateSkill({
+        ...validSkill,
+        deprecation: {
+          deprecated: true,
+          message: "Use v2",
+          replacement: "code-review-v2",
+          since: "2026-01-01",
+          removeBy: "2026-06-01",
+        },
+      });
+      expect(result.valid).toBe(true);
     });
   });
 });

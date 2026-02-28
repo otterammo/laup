@@ -12,6 +12,61 @@ Read before writing. Verify after changing.
 
 ---
 
+## Starting from a GitHub Issue
+
+1. **Pick an issue** — if no issue number is given, select one autonomously:
+
+   ```bash
+   # List open MUST issues, oldest first
+   gh issue list --repo otterammo/laup --label MUST --state open \
+     --json number,title,labels --order asc --limit 50
+   ```
+
+   Selection rules (apply in order):
+   - Skip any issue whose `## Dependencies` section references an open issue
+   - Prefer the lowest-numbered qualifying issue (earliest requirement = most foundational)
+   - If all MUST issues are blocked or done, fall back to `--label SHOULD`
+
+   Announce the chosen issue number and title before proceeding.
+
+1. **Read the issue**
+
+   ```bash
+   gh issue view <number> --repo otterammo/laup
+   ```
+
+   Every issue contains:
+   - `## Requirement` — verbatim text from DOC-103; the authoritative definition of done
+   - `## Classification` — MUST / SHOULD / MAY; MUST = ship this iteration
+   - `## Acceptance Criteria` — checkbox list; each item must be verifiably true before closing
+   - `## Dependencies` — other requirement IDs that must be satisfied first; check their issues are
+     closed or at minimum their acceptance criteria are met before starting
+
+1. **Map to code**
+
+   - Issue title prefix (`[CONF-001]`, `[MEM-004]`, etc.) maps to a capability area
+   - Cross-reference the Repository Map below to find the relevant package(s)
+   - If no package exists yet for the area (Phase 2 packages), scaffold it before implementing
+
+1. **Create a branch**
+
+   ```bash
+   git checkout -b feat/<area>/<req-id>-short-description
+   # e.g. feat/conf/conf-003-propagation-watcher
+   ```
+
+1. **Execute the Task Execution Loop below**, using the Acceptance Criteria as your definition
+   of done — not the requirement prose.
+
+1. **Close the issue on completion**
+
+   ```bash
+   gh issue close <number> --repo otterammo/laup \
+     --comment "Implemented in <commit-sha>. All acceptance criteria verified."
+   ```
+
+---
+
 ## Task Execution Loop
 
 1. **Understand** - read the relevant files and constraints before writing anything

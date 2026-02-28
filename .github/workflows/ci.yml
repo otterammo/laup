@@ -30,6 +30,9 @@ jobs:
       - name: Lint (Markdown + Machine-readable + Biome)
         run: pnpm run lint
 
+      - name: Build packages
+        run: pnpm run build
+
       - name: Typecheck
         run: pnpm run typecheck
 

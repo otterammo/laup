@@ -13,6 +13,15 @@ export type { Scope, ScopedDocument } from "./scope.js";
 export { mergeScopes, SCOPE_PRECEDENCE, scopePrecedence } from "./scope.js";
 export type { ScopeConfig, ScopeLoadResult } from "./scope-loader.js";
 export { getDefaultScopePath, loadScopedDocument, loadScopes } from "./scope-loader.js";
+export type { SkillRenderer } from "./skill-renderer.js";
+export {
+  AiderSkillRenderer,
+  ClaudeCodeSkillRenderer,
+  CursorSkillRenderer,
+  getSkillRenderer,
+  renderSkillToAllTools,
+  skillRenderers,
+} from "./skill-renderer.js";
 export type {
   Skill,
   SkillMetadata,

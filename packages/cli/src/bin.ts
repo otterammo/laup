@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { aiderAdapter } from "@laup/aider";
 import { claudeCodeAdapter } from "@laup/claude-code";
 import type { SyncResult } from "@laup/config-hub";
 import { SyncEngine } from "@laup/config-hub";
-import { validateCanonical } from "@laup/core";
+import { loadScopes, validateCanonical } from "@laup/core";
 import { cursorAdapter } from "@laup/cursor";
 
 const ALL_ADAPTERS = [claudeCodeAdapter, cursorAdapter, aiderAdapter];
@@ -18,6 +18,10 @@ const { values: flags, positionals } = parseArgs({
     tools: { type: "string", short: "t" },
     "output-dir": { type: "string", short: "o" },
     "dry-run": { type: "boolean", default: false },
+    "merge-scopes": { type: "boolean", short: "m", default: false },
+    team: { type: "string" },
+    "org-path": { type: "string" },
+    "teams-dir": { type: "string" },
     help: { type: "boolean", short: "h", default: false },
   },
   allowPositionals: true,
@@ -33,10 +37,14 @@ Commands:
   validate  Validate a canonical instruction file against the ADR-001 schema
 
 Options for sync:
-  --source, -s      Path to canonical instruction file (required)
-  --tools, -t       Comma-separated tool IDs (default: all registered adapters)
-  --output-dir, -o  Target directory for output files (default: source file directory)
-  --dry-run         Preview without writing any files
+  --source, -s       Path to canonical instruction file (required)
+  --tools, -t        Comma-separated tool IDs (default: all registered adapters)
+  --output-dir, -o   Target directory for output files (default: source file directory)
+  --dry-run          Preview without writing any files
+  --merge-scopes, -m Merge org/team/project configs before syncing (CONF-004)
+  --team             Team name for scope merging (overrides metadata.team)
+  --org-path         Path to org config (default: ~/.config/laup/org.md)
+  --teams-dir        Directory containing team configs (default: ~/.config/laup/teams/)
 
 Options for validate:
   --source, -s      Path to canonical instruction file (required)
@@ -78,17 +86,41 @@ if (command === "sync") {
   const toolIds = toolsArg ? toolsArg.split(",").map((t) => t.trim()) : [];
   const outputDir = flags["output-dir"];
   const dryRun = flags["dry-run"] ?? false;
+  const mergeScopes = flags["merge-scopes"] ?? false;
+  const team = flags.team;
+  const orgPath = flags["org-path"];
+  const teamsDir = flags["teams-dir"];
 
   const engine = new SyncEngine(ALL_ADAPTERS);
 
   let results: SyncResult[];
   try {
-    results = engine.sync({
-      source: resolve(source),
-      tools: toolIds,
-      ...(outputDir ? { outputDir: resolve(outputDir) } : {}),
-      dryRun,
-    });
+    if (mergeScopes) {
+      // Load and merge documents from all scopes
+      const loadResult = loadScopes(resolve(source), {
+        team,
+        orgPath,
+        teamsDir,
+      });
+
+      // Log which scopes were loaded
+      const scopeList = loadResult.documents.map((d) => d.scope).join(" → ");
+      console.log(`Merging scopes: ${scopeList}`);
+
+      results = engine.syncDocument({
+        document: loadResult.merged,
+        tools: toolIds,
+        outputDir: outputDir ? resolve(outputDir) : dirname(resolve(source)),
+        dryRun,
+      });
+    } else {
+      results = engine.sync({
+        source: resolve(source),
+        tools: toolIds,
+        ...(outputDir ? { outputDir: resolve(outputDir) } : {}),
+        dryRun,
+      });
+    }
   } catch (err) {
     console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);

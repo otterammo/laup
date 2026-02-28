@@ -70,7 +70,7 @@ export const FrontmatterSchema = z.object({
     .string()
     .regex(/^\d+\.\d+$/, "version must match pattern N.N (e.g. '1.0')")
     .default("1.0"),
-  scope: z.enum(["project", "workspace", "global"]).default("project"),
+  scope: z.enum(["project", "team", "org"]).default("project"),
   metadata: z
     .object({
       name: z.string().optional(),

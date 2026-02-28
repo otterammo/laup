@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { type FSWatcher, readFileSync, watch } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { ToolAdapter, ValidationResult } from "@laup/core";
+import type { CanonicalInstruction, ToolAdapter, ValidationResult } from "@laup/core";
 import { parseCanonical, validateCanonical } from "@laup/core";
 
 export type { ValidationResult };
@@ -22,6 +22,17 @@ export interface SyncOptions {
   outputDir?: string;
   /** When true, skip writing files and return what would be written. */
   dryRun?: boolean;
+}
+
+export interface SyncDocumentOptions {
+  /** Pre-parsed/merged canonical instruction document. */
+  document: CanonicalInstruction;
+  /** Tool IDs to sync. Pass empty array to sync all registered adapters. */
+  tools: string[];
+  /** Target directory for output files. Required. */
+  outputDir: string;
+  /** When true, skip writing files and return what would be written. Default: false. */
+  dryRun?: boolean | undefined;
 }
 
 export interface WatchOptions {
@@ -74,10 +85,24 @@ export class SyncEngine {
   sync(options: SyncOptions): SyncResult[] {
     const sourcePath = resolve(options.source);
     const targetDir = options.outputDir ?? dirname(sourcePath);
-    const toolIds = options.tools.length > 0 ? options.tools : this.registeredTools;
-    const results: SyncResult[] = [];
-
     const doc = parseCanonical(sourcePath);
+
+    return this.syncDocument({
+      document: doc,
+      tools: options.tools,
+      outputDir: targetDir,
+      ...(options.dryRun !== undefined ? { dryRun: options.dryRun } : {}),
+    });
+  }
+
+  /**
+   * Sync a pre-parsed/merged document to tool-specific output files.
+   * Useful when merging documents from multiple scopes before syncing.
+   */
+  syncDocument(options: SyncDocumentOptions): SyncResult[] {
+    const toolIds = options.tools.length > 0 ? options.tools : this.registeredTools;
+    const dryRun = options.dryRun ?? false;
+    const results: SyncResult[] = [];
 
     for (const toolId of toolIds) {
       const adapter = this.adapters.get(toolId);
@@ -92,8 +117,8 @@ export class SyncEngine {
       }
 
       try {
-        const rendered = adapter.render(doc);
-        const paths = options.dryRun ? [] : adapter.write(rendered, targetDir);
+        const rendered = adapter.render(options.document);
+        const paths = dryRun ? [] : adapter.write(rendered, options.outputDir);
         results.push({ tool: toolId, success: true, paths });
       } catch (err) {
         results.push({

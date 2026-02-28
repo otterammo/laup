@@ -42,3 +42,6 @@ infra/data/
 .changeset/*.md
 !.changeset/README.md
 !.changeset/config.json
+
+# Misc
+.claude/

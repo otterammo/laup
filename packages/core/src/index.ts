@@ -1,6 +1,8 @@
 export type { ToolAdapter, ToolCategory } from "./adapter.js";
 export type { HierarchyLoadResult, HierarchyOptions } from "./hierarchy.js";
 export { findRootInstruction, loadHierarchy } from "./hierarchy.js";
+export type { ImportFormat, ImportResult } from "./import.js";
+export { detectFormat, importDocument, serializeCanonical } from "./import.js";
 export type { IncludeOptions, IncludeResult } from "./include.js";
 export { extractIncludePaths, hasIncludes, processIncludes } from "./include.js";
 export type { FieldIssue } from "./parse.js";

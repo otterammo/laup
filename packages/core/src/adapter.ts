@@ -28,4 +28,11 @@ export interface ToolAdapter {
    * Returns the list of file paths written.
    */
   write(rendered: string | string[], targetDir: string): string[];
+
+  /**
+   * Get expected output paths without writing (CONF-020).
+   * Used for diff preview to locate existing files.
+   * Default implementation can be derived from write() conventions.
+   */
+  getOutputPaths?(targetDir: string): string[];
 }

@@ -1,10 +1,13 @@
 import { EventEmitter } from "node:events";
-import { type FSWatcher, readFileSync, watch } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, type FSWatcher, readFileSync, watch } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import type { CanonicalInstruction, ToolAdapter, ValidationResult } from "@laup/core";
 import { parseCanonical, validateCanonical } from "@laup/core";
+import { computeDiff, type DiffResult } from "./diff.js";
 
 export type { ValidationResult };
+export type { DiffLine, DiffResult } from "./diff.js";
+export { computeDiff, formatDiff } from "./diff.js";
 
 export interface SyncResult {
   tool: string;
@@ -18,6 +21,18 @@ export interface PreviewResult {
   success: boolean;
   /** Rendered content for each output file. Array for tools with multiple outputs. */
   content: string[];
+  error?: string;
+}
+
+export interface DiffPreviewResult {
+  tool: string;
+  success: boolean;
+  /** Per-file diff results with path and diff */
+  files: Array<{
+    path: string;
+    exists: boolean;
+    diff: DiffResult;
+  }>;
   error?: string;
 }
 
@@ -177,6 +192,83 @@ export class SyncEngine {
     }
 
     return results;
+  }
+
+  /**
+   * Preview with diff: compare rendered output against existing files (CONF-020).
+   * Returns per-file diff results showing what would change.
+   */
+  previewWithDiff(
+    document: CanonicalInstruction,
+    outputDir: string,
+    tools: string[] = [],
+  ): DiffPreviewResult[] {
+    const toolIds = tools.length > 0 ? tools : this.registeredTools;
+    const results: DiffPreviewResult[] = [];
+
+    for (const toolId of toolIds) {
+      const adapter = this.adapters.get(toolId);
+      if (!adapter) {
+        results.push({
+          tool: toolId,
+          success: false,
+          files: [],
+          error: `No adapter registered for tool: ${toolId}`,
+        });
+        continue;
+      }
+
+      try {
+        const rendered = adapter.render(document);
+        const contentArray = Array.isArray(rendered) ? rendered : [rendered];
+
+        // Get expected output paths
+        const paths = adapter.getOutputPaths
+          ? adapter.getOutputPaths(outputDir)
+          : this.inferPaths(toolId, outputDir, contentArray.length);
+
+        const files: DiffPreviewResult["files"] = [];
+
+        for (let i = 0; i < contentArray.length; i++) {
+          const filePath = paths[i] ?? join(outputDir, `${toolId}-output-${i}`);
+          const newContent = contentArray[i] ?? "";
+
+          const fileExists = existsSync(filePath);
+          const oldContent = fileExists ? readFileSync(filePath, "utf-8") : "";
+
+          const diff = computeDiff(oldContent, newContent);
+          files.push({ path: filePath, exists: fileExists, diff });
+        }
+
+        results.push({ tool: toolId, success: true, files });
+      } catch (err) {
+        results.push({
+          tool: toolId,
+          success: false,
+          files: [],
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /** Fallback path inference for adapters without getOutputPaths */
+  private inferPaths(toolId: string, outputDir: string, count: number): string[] {
+    // Known conventions for common tools
+    const conventions: Record<string, string[]> = {
+      cursor: [join(outputDir, ".cursorrules"), join(outputDir, ".cursor", "rules", "laup.mdc")],
+      "claude-code": [join(outputDir, "CLAUDE.md")],
+      aider: [join(outputDir, ".aider.conf.yml"), join(outputDir, "CONVENTIONS.md")],
+    };
+
+    if (conventions[toolId]) {
+      return conventions[toolId];
+    }
+
+    // Generic fallback
+    return Array.from({ length: count }, (_, i) => join(outputDir, `${toolId}-output-${i}`));
   }
 }
 

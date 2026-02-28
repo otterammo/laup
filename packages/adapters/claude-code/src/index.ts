@@ -26,6 +26,10 @@ export class ClaudeCodeAdapter implements ToolAdapter {
     writeFileSync(outPath, `${rendered}\n`, "utf-8");
     return [outPath];
   }
+
+  getOutputPaths(targetDir: string): string[] {
+    return [join(targetDir, "CLAUDE.md")];
+  }
 }
 
 export const claudeCodeAdapter = new ClaudeCodeAdapter();

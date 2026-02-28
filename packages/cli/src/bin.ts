@@ -28,6 +28,7 @@ const { values: flags, positionals } = parseArgs({
     inherit: { type: "boolean", short: "i", default: false },
     "stop-at": { type: "string" },
     "expand-includes": { type: "boolean", short: "e", default: false },
+    category: { type: "string", short: "c" },
     team: { type: "string" },
     "org-path": { type: "string" },
     "teams-dir": { type: "string" },
@@ -48,6 +49,7 @@ Commands:
 Options for sync:
   --source, -s       Path to canonical instruction file (required)
   --tools, -t        Comma-separated tool IDs (default: all registered adapters)
+  --category, -c     Filter tools by category: ide, cli, agent, other (CONF-015)
   --output-dir, -o   Target directory for output files (default: source file directory)
   --dry-run          Preview rendered output without writing files (CONF-016)
   --inherit, -i      Load and merge parent directory instruction files (CONF-005)
@@ -95,7 +97,7 @@ if (command === "sync") {
   }
 
   const toolsArg = flags.tools;
-  const toolIds = toolsArg ? toolsArg.split(",").map((t) => t.trim()) : [];
+  const categoryArg = flags.category;
   const outputDir = flags["output-dir"];
   const dryRun = flags["dry-run"] ?? false;
   const mergeScopes = flags["merge-scopes"] ?? false;
@@ -106,7 +108,30 @@ if (command === "sync") {
   const orgPath = flags["org-path"];
   const teamsDir = flags["teams-dir"];
 
-  const engine = new SyncEngine(ALL_ADAPTERS);
+  // Filter adapters by category if specified (CONF-015)
+  let adapters = ALL_ADAPTERS;
+  if (categoryArg) {
+    const validCategories = ["ide", "cli", "agent", "other"];
+    if (!validCategories.includes(categoryArg)) {
+      console.error(
+        `Error: Invalid category "${categoryArg}". Valid: ${validCategories.join(", ")}`,
+      );
+      process.exit(1);
+    }
+    adapters = ALL_ADAPTERS.filter((a) => (a.category ?? "other") === categoryArg);
+    if (adapters.length === 0) {
+      console.error(`Error: No adapters found for category "${categoryArg}"`);
+      process.exit(1);
+    }
+    console.log(
+      `Filtering by category: ${categoryArg} (${adapters.map((a) => a.toolId).join(", ")})`,
+    );
+  }
+
+  // Then filter by specific tool IDs if also specified
+  const toolIds = toolsArg ? toolsArg.split(",").map((t) => t.trim()) : [];
+
+  const engine = new SyncEngine(adapters);
 
   let results: SyncResult[];
   try {

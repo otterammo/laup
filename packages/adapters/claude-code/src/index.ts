@@ -9,6 +9,7 @@ import type { CanonicalInstruction, ToolAdapter } from "@laup/core";
 export class ClaudeCodeAdapter implements ToolAdapter {
   readonly toolId = "claude-code";
   readonly displayName = "Claude Code";
+  readonly category = "cli" as const;
 
   render(doc: CanonicalInstruction): string {
     const lines: string[] = [

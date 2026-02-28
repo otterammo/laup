@@ -2,26 +2,31 @@
 
 > Write your project instructions once. Sync them everywhere.
 
-LAUP is a middleware layer that solves the configuration fragmentation problem that arises when development teams run multiple LLM coding agents simultaneously. Claude Code, Cursor, and Aider each require their own instruction file format. LAUP maintains a single canonical instruction file and propagates it to every tool automatically.
+LAUP is a middleware layer that solves configuration fragmentation for teams running multiple
+LLM coding agents. Claude Code, Cursor, and Aider each require their own instruction file
+format. LAUP maintains a single canonical instruction file and propagates it to every tool
+automatically.
 
 ## The Problem
 
-Running three agents means maintaining three instruction files — `CLAUDE.md`, `.cursorrules`, `.aider.conf.yml` — that diverge the moment anyone edits one of them. Teams either accept drift or manually synchronize files that should be identical.
+Running three agents means maintaining three instruction files — `CLAUDE.md`, `.cursorrules`,
+`.aider.conf.yml` — that diverge the moment anyone edits one of them. Teams either accept drift
+or manually synchronize files that should be identical.
 
 ## The Solution
 
 ```text
-laup.md  →  laup sync  →  CLAUDE.md
-                       →  .cursorrules
-                       →  .cursor/rules/laup.mdc
-                       →  .aider.conf.yml + CONVENTIONS.md
+laup.md  ->  laup sync  ->  CLAUDE.md
+                       ->  .cursorrules
+                       ->  .cursor/rules/laup.mdc
+                       ->  .aider.conf.yml + CONVENTIONS.md
 ```
 
 One source of truth. One command to propagate.
 
 ## Quick Start
 
-**Prerequisites:** Node.js ≥ 22, pnpm ≥ 9
+**Prerequisites:** Node.js >= 22, pnpm >= 9
 
 ```bash
 # Build from source
@@ -83,11 +88,12 @@ Write your project instructions in plain Markdown. This body is rendered
 into every tool-specific output file verbatim.
 ```
 
-The frontmatter is optional — a plain Markdown file with no `---` block is valid and uses defaults (`version: "1.0"`, `scope: project`).
+The frontmatter is optional. A plain Markdown file with no `---` block is valid and uses
+defaults (`version: "1.0"`, `scope: project`).
 
 ## CLI Reference
 
-```
+```text
 laup sync      Sync canonical instruction file to tool-specific output files
 laup validate  Validate a canonical instruction file against the schema
 
@@ -123,47 +129,53 @@ laup validate --source laup.md && laup sync --source laup.md
 ## Supported Tools
 
 | Tool | Output file(s) | Format |
-|---|---|---|
+| --- | --- | --- |
 | `claude-code` | `CLAUDE.md` | Markdown pass-through |
 | `cursor` | `.cursorrules`, `.cursor/rules/laup.mdc` | Legacy Markdown + MDC (dual-format) |
 | `aider` | `.aider.conf.yml`, `CONVENTIONS.md` | YAML config + Markdown conventions |
 
 ## Repository Structure
 
-```
+```text
 laup/
-├── packages/
-│   ├── core/                # Canonical schema, ToolAdapter interface, parse/validate
-│   ├── config-hub/          # SyncEngine — orchestrates adapters
-│   ├── cli/                 # laup CLI (laup sync, laup validate)
-│   └── adapters/
-│       ├── claude-code/     # CLAUDE.md renderer
-│       ├── cursor/          # .cursorrules + .cursor/rules/laup.mdc renderer
-│       └── aider/           # .aider.conf.yml + CONVENTIONS.md renderer
-├── infra/
-│   └── docker-compose.yml   # PostgreSQL+pgvector, Redis, Vault (for Phase 2)
-└── docs/                    # Architecture and requirements docs
+|-- packages/
+|   |-- core/                # Canonical schema, ToolAdapter interface, parse/validate
+|   |-- config-hub/          # SyncEngine - orchestrates adapters
+|   |-- cli/                 # laup CLI (laup sync, laup validate)
+|   `-- adapters/
+|       |-- claude-code/     # CLAUDE.md renderer
+|       |-- cursor/          # .cursorrules + .cursor/rules/laup.mdc renderer
+|       `-- aider/           # .aider.conf.yml + CONVENTIONS.md renderer
+|-- infra/
+|   `-- docker-compose.yml   # PostgreSQL+pgvector, Redis, Vault (for Phase 2)
+`-- docs/                    # Architecture and requirements docs
 ```
 
 ## Development
 
 ```bash
-pnpm install          # Install dependencies
-pnpm run build        # Compile all packages
-pnpm run test:run     # Run all tests (74 tests, run from root)
-pnpm run typecheck    # TypeScript strict check across all packages
-pnpm run lint         # Biome lint + format check
-pnpm run lint:fix     # Auto-fix lint issues
+pnpm install               # Install dependencies
+pnpm run build             # Compile all packages
+pnpm run test:run          # Run all tests (74 tests, run from root)
+pnpm run typecheck         # TypeScript strict check across all packages
+pnpm run lint              # Markdown + machine-readable + Biome checks
+pnpm run lint:md           # Markdown and MDC checks only
+pnpm run lint:machine      # YAML + frontmatter + JSON/JSONC (Biome)
+pnpm run lint:fix          # Safe autofix + full lint verification
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
+See [docs/style/markdown-machine-style-guide.md](docs/style/markdown-machine-style-guide.md)
+for markdown and machine-readable standards.
 
 ## Roadmap
 
 LAUP's kernel (configuration sync) is Phase 1. The full platform adds:
 
-- **Phase 2:** Skill Library (portable slash commands), Memory Layer (pgvector), Permission Engine (Cedar WASM), MCP Registry (single-registration), Agent Handoff (Redis transport)
-- **Phase 3:** Cost & Observability (OTel), additional adapters (Gemini CLI, Windsurf, Continue, OpenCode, GitHub Copilot, Devin)
+- **Phase 2:** Skill Library (portable slash commands), Memory Layer (pgvector), Permission
+  Engine (Cedar WASM), MCP Registry (single-registration), Agent Handoff (Redis transport)
+- **Phase 3:** Cost & Observability (OTel), additional adapters (Gemini CLI, Windsurf,
+  Continue, OpenCode, GitHub Copilot, Devin)
 
 ## License
 

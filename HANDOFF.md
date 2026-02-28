@@ -9,7 +9,9 @@
 
 ## result
 
-Day 1 milestone achieved. `laup sync` reads a canonical instruction file and writes correct, validated tool-specific files for Claude Code, Cursor, and Aider. All 74 tests pass. Zero typecheck errors. Zero lint errors. 10 commits on `main`.
+Day 1 milestone achieved. `laup sync` reads a canonical instruction file and writes
+correct, validated tool-specific files for Claude Code, Cursor, and Aider.
+All 74 tests pass. Zero typecheck errors. Zero lint errors. 10 commits on `main`.
 
 ---
 
@@ -27,6 +29,7 @@ Day 1 milestone achieved. `laup sync` reads a canonical instruction file and wri
 | `@laup/cli` | `packages/cli/` | `laup sync` and `laup validate` commands |
 
 ### Infrastructure in place
+
 - Docker Compose: PostgreSQL 16 + pgvector, Redis 7, Vault dev server (`infra/docker-compose.yml`)
 - GitHub Actions: CI (lint + typecheck + test on every push), release pipeline (Changesets)
 - Dependabot: weekly npm + GitHub Actions updates
@@ -35,7 +38,7 @@ Day 1 milestone achieved. `laup sync` reads a canonical instruction file and wri
 
 ## validation
 
-```
+```text
 Test Files  6 passed (6)
 Tests       74 passed (74)
 Typecheck   6 packages — zero errors
@@ -43,6 +46,7 @@ Biome       34 files — zero issues
 ```
 
 Day 1 scenario verified:
+
 ```bash
 node packages/cli/dist/bin.js sync --source laup.md --tools claude-code,cursor,aider
 # → writes CLAUDE.md, .cursorrules, .cursor/rules/laup.mdc, .aider.conf.yml, CONVENTIONS.md
@@ -54,13 +58,17 @@ node packages/cli/dist/bin.js sync --source laup.md --tools claude-code,cursor,a
 
 ### Immediate next step: Backlog Seeding
 
-Read `docs/laup/phase-1-requirements/DOC-103-capability-requirements.md` (in the docs repo at `/Users/mattmoore/untitled/`) and generate one GitHub Issue per requirement ID (CONF-001 through COST-012). Each issue should have:
+Read `docs/laup/phase-1-requirements/DOC-103-capability-requirements.md`
+(in the docs repo at `/Users/mattmoore/untitled/`) and generate one GitHub
+Issue per requirement ID (CONF-001 through COST-012). Each issue should have:
+
 - Requirement ID as a label (e.g. `conf`, `skill`, `mem`, `perm`, `hand`, `mcp`, `cost`)
 - Classification: MUST / SHOULD / MAY from the document
 - Acceptance criteria derived directly from the requirement text
 - Dependency links where the requirement text references other requirements
 
-The full requirement IDs are: `CONF-001–020`, `SKILL-001–015`, `MEM-001–015`, `PERM-001–020`, `HAND-001–012`, `MCP-001–010`, `COST-001–012`.
+The full requirement IDs are: `CONF-001–020`, `SKILL-001–015`, `MEM-001–015`,
+`PERM-001–020`, `HAND-001–012`, `MCP-001–010`, `COST-001–012`.
 
 ### Phase 2 packages (not yet started)
 
@@ -165,22 +173,31 @@ All four of these are enabled and will bite you:
 
 1. **`noPropertyAccessFromIndexSignature: true`**
    Cannot use `obj.key` on types with `[key: string]: T` index signatures — must use `obj["key"]`.
-   Zod v4's `z.looseObject()` produces such types. Workaround: cast with `as ConcreteType` before property access (see `packages/adapters/aider/src/index.ts` for the pattern).
+   Zod v4's `z.looseObject()` produces such types.
+   Workaround: cast with `as ConcreteType` before property access
+   (see `packages/adapters/aider/src/index.ts` for the pattern).
 
-2. **`noUncheckedIndexedAccess: true`**
-   Array/object element access returns `T | undefined`. Array destructuring `const [a] = arr` gives `a: T | undefined`.
+1. **`noUncheckedIndexedAccess: true`**
+   Array/object element access returns `T | undefined`.
+   Array destructuring `const [a] = arr` gives `a: T | undefined`.
    Fix: `const [a] = arr as [T]` to narrow when you know the element exists.
 
-3. **`exactOptionalPropertyTypes: true`**
-   `prop?: string` means the property can be **absent** but NOT `undefined`. Cannot pass `{ prop: undefined }`.
+1. **`exactOptionalPropertyTypes: true`**
+   `prop?: string` means the property can be **absent** but NOT `undefined`.
+   Cannot pass `{ prop: undefined }`.
    Fix: use conditional spread `...(val !== undefined ? { prop: val } : {})`.
 
-4. **`noImplicitAnyLet: true`** (via strict)
+1. **`noImplicitAnyLet: true`** (via strict)
    `let x;` without a type annotation is an error. Always annotate: `let x: MyType`.
 
 ### Biome vs TypeScript conflict
 
-For `Record<string, unknown>` properties: Biome wants dot notation (`config.key`), TypeScript wants bracket notation (`config["key"]`). Resolution: use a typed interface instead of `Record<string, unknown>` — named properties can then use dot notation, and only hyphenated keys (which are invalid identifiers anyway) require bracket notation. See `AiderYamlConfig` in [packages/adapters/aider/src/index.ts](packages/adapters/aider/src/index.ts).
+For `Record<string, unknown>` properties: Biome wants dot notation (`config.key`),
+TypeScript wants bracket notation (`config["key"]`). Resolution: use a typed
+interface instead of `Record<string, unknown>` - named properties can then use dot
+notation, and only hyphenated keys (which are invalid identifiers anyway) require
+bracket notation. See `AiderYamlConfig` in
+[packages/adapters/aider/src/index.ts](packages/adapters/aider/src/index.ts).
 
 ### Zod v4 API differences from v3
 
@@ -193,17 +210,22 @@ For `Record<string, unknown>` properties: Biome wants dot notation (`config.key`
 
 ### Test runner
 
-Always run `pnpm run test:run` from the **workspace root**. The root `vitest.config.ts` uses `packages/**/src/__tests__/**/*.test.ts` which matches nested adapter paths. Running vitest from a package subdirectory picks up the root config but resolves patterns relative to the wrong directory.
+Always run `pnpm run test:run` from the **workspace root**.
+The root `vitest.config.ts` uses `packages/**/src/__tests__/**/*.test.ts`
+which matches nested adapter paths. Running vitest from a package subdirectory
+picks up the root config but resolves patterns relative to the wrong directory.
 
 ### New adapter checklist
 
 When adding a new adapter (e.g. `packages/adapters/gemini-cli/`):
+
 1. Add package.json with `@laup/core: workspace:*` dep
-2. Add tsconfig.json extending `../../../tsconfig.base.json` with `references: [{ path: "../../core" }]`
-3. Implement `ToolAdapter` interface from `@laup/core`
-4. Add golden-file tests in `src/__tests__/golden/`
-5. Register adapter in `packages/cli/src/bin.ts` `ALL_ADAPTERS` array
-6. Build order: core → new adapter → config-hub → cli
+1. Add tsconfig.json extending `../../../tsconfig.base.json` with
+   `references: [{ path: "../../core" }]`
+1. Implement `ToolAdapter` interface from `@laup/core`
+1. Add golden-file tests in `src/__tests__/golden/`
+1. Register adapter in `packages/cli/src/bin.ts` `ALL_ADAPTERS` array
+1. Build order: core → new adapter → config-hub → cli
 
 ---
 

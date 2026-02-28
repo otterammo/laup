@@ -7,11 +7,19 @@
     "build": "pnpm -r run build",
     "test": "vitest",
     "test:run": "vitest run",
-    "lint": "biome check .",
-    "lint:fix": "biome check --write .",
+    "lint": "pnpm run lint:md && pnpm run lint:machine",
+    "lint:fix": "pnpm run lint:md:fix && pnpm run lint:yaml:fix && pnpm run lint:biome:fix && pnpm run lint",
     "typecheck": "pnpm -r run typecheck",
     "clean": "pnpm -r run clean && rm -rf node_modules",
-    "prepare": "husky"
+    "prepare": "husky",
+    "lint:biome": "biome check .",
+    "lint:biome:fix": "biome check --write .",
+    "lint:md": "markdownlint-cli2",
+    "lint:md:fix": "markdownlint-cli2 --fix",
+    "lint:frontmatter": "node scripts/lint-frontmatter.mjs",
+    "lint:yaml": "node scripts/lint-yaml.mjs",
+    "lint:yaml:fix": "node scripts/lint-yaml.mjs --fix",
+    "lint:machine": "pnpm run lint:yaml && pnpm run lint:frontmatter && pnpm run lint:biome"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
@@ -19,11 +27,19 @@
     "@types/node": "^25.3.2",
     "husky": "^9.1.7",
     "lint-staged": "^15.3.0",
+    "markdownlint-cli2": "^0.21.0",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "yaml": "^2.8.2"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx,json}": ["biome check --write --no-errors-on-unmatched"]
+    "*.{ts,tsx,js,jsx,json}": ["biome check --write --no-errors-on-unmatched"],
+    "*.{md,mdc}": [
+      "markdownlint-cli2 --fix",
+      "markdownlint-cli2",
+      "node scripts/lint-frontmatter.mjs"
+    ],
+    "*.{yml,yaml}": ["node scripts/lint-yaml.mjs --fix", "node scripts/lint-yaml.mjs"]
   },
   "engines": {
     "node": ">=22.0.0",

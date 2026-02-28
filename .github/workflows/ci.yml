@@ -29,7 +29,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint (Biome)
+      - name: Lint (Markdown + Machine-readable + Biome)
         run: pnpm run lint
 
       - name: Typecheck

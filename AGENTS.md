@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Operating standard for AI agents working in this repository.
-Extends the base standard at `/Users/mattmoore/untitled/AGENTS.md`.
+Extends the base standard at `/path/to/docs-repo/AGENTS.md`.
 
 ---
 
@@ -135,18 +135,3 @@ Every completed task report must include:
 - `validation` - test/typecheck/lint output confirming the change works
 - `open_items` - anything not done, deferred, or requiring human decision
 - `sources_or_files` - key files read or modified
-
----
-
-## Documentation Intake
-
-Architecture docs live in `/Users/mattmoore/untitled/docs/laup/`.
-When a task depends on architecture decisions:
-
-- Route by area: `phase-2-architecture/DOC-20x-*` for design,
-  `phase-1-requirements/DOC-103-*` for requirements
-- Read `DOC-201-system-architecture.md` for cross-cutting decisions
-- ADR docs (`DOC-209` through `DOC-212`) are binding for implementation choices
-
-Memory and cross-session context:
-`/Users/mattmoore/.claude/projects/-Users-mattmoore-untitled/memory/MEMORY.md`

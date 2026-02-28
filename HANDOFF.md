@@ -59,7 +59,7 @@ node packages/cli/dist/bin.js sync --source laup.md --tools claude-code,cursor,a
 ### Immediate next step: Backlog Seeding
 
 Read `docs/laup/phase-1-requirements/DOC-103-capability-requirements.md`
-(in the docs repo at `/Users/mattmoore/untitled/`) and generate one GitHub
+(in the docs repo at `/path/to/docs-repo/`) and generate one GitHub
 Issue per requirement ID (CONF-001 through COST-012). Each issue should have:
 
 - Requirement ID as a label (e.g. `conf`, `skill`, `mem`, `perm`, `hand`, `mcp`, `cost`)
@@ -116,7 +116,7 @@ These packages are scaffolded with placeholder `index.ts` files but have no impl
 | [vitest.config.ts](vitest.config.ts) | Run tests from root only; per-package runner doesn't resolve the root config |
 | [tsconfig.base.json](tsconfig.base.json) | Strict mode flags — several non-obvious settings (see Gotchas below) |
 
-### Architecture docs (in `/Users/mattmoore/untitled/docs/laup/`)
+### Architecture docs (in `/path/to/docs-repo/docs/laup/`)
 
 | Doc | Topic |
 |---|---|
@@ -231,7 +231,7 @@ When adding a new adapter (e.g. `packages/adapters/gemini-cli/`):
 
 ## Session context
 
-- Docs repo: `/Users/mattmoore/untitled/` (read-only reference)
-- Implementation repo: `/Users/mattmoore/dev/laup/`
-- Memory file: `/Users/mattmoore/.claude/projects/-Users-mattmoore-untitled/memory/MEMORY.md`
-- Plan file: `/Users/mattmoore/.claude/plans/buzzing-sprouting-taco.md`
+- Docs repo: `/path/to/docs-repo/` (read-only reference)
+- Implementation repo: `/path/to/implementation-repo/`
+- Memory file: `~/.claude/projects/<project-id>/memory/MEMORY.md`
+- Plan file: `~/.claude/plans/<plan-file>.md`

@@ -22,14 +22,14 @@
     "lint:machine": "pnpm run lint:yaml && pnpm run lint:frontmatter && pnpm run lint:biome"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "^2.4.4",
     "@changesets/cli": "^2.27.11",
     "@types/node": "^25.3.2",
     "husky": "^9.1.7",
-    "lint-staged": "^15.3.0",
+    "lint-staged": "^16.2.7",
     "markdownlint-cli2": "^0.21.0",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.8",
+    "vitest": "^4.0.18",
     "yaml": "^2.8.2"
   },
   "lint-staged": {

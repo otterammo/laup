@@ -6,7 +6,13 @@ import { aiderAdapter } from "@laup/aider";
 import { claudeCodeAdapter } from "@laup/claude-code";
 import type { SyncResult } from "@laup/config-hub";
 import { SyncEngine } from "@laup/config-hub";
-import { loadHierarchy, loadScopes, validateCanonical } from "@laup/core";
+import {
+  loadHierarchy,
+  loadScopes,
+  parseCanonical,
+  processIncludes,
+  validateCanonical,
+} from "@laup/core";
 import { cursorAdapter } from "@laup/cursor";
 
 const ALL_ADAPTERS = [claudeCodeAdapter, cursorAdapter, aiderAdapter];
@@ -21,6 +27,7 @@ const { values: flags, positionals } = parseArgs({
     "merge-scopes": { type: "boolean", short: "m", default: false },
     inherit: { type: "boolean", short: "i", default: false },
     "stop-at": { type: "string" },
+    "expand-includes": { type: "boolean", short: "e", default: false },
     team: { type: "string" },
     "org-path": { type: "string" },
     "teams-dir": { type: "string" },
@@ -45,6 +52,7 @@ Options for sync:
   --dry-run          Preview without writing any files
   --inherit, -i      Load and merge parent directory instruction files (CONF-005)
   --stop-at          Stop hierarchy traversal at this directory
+  --expand-includes, -e  Expand @include directives before syncing (CONF-006)
   --merge-scopes, -m Merge org/team/project configs before syncing (CONF-004)
   --team             Team name for scope merging (overrides metadata.team)
   --org-path         Path to org config (default: ~/.config/laup/org.md)
@@ -92,6 +100,7 @@ if (command === "sync") {
   const dryRun = flags["dry-run"] ?? false;
   const mergeScopes = flags["merge-scopes"] ?? false;
   const inherit = flags.inherit ?? false;
+  const expandIncludes = flags["expand-includes"] ?? false;
   const stopAt = flags["stop-at"];
   const team = flags.team;
   const orgPath = flags["org-path"];
@@ -101,51 +110,48 @@ if (command === "sync") {
 
   let results: SyncResult[];
   try {
+    // Load document based on mode
+    let doc = parseCanonical(resolve(source));
+
     if (inherit) {
       // Load hierarchical instructions from parent directories (CONF-005)
-      const loadResult = loadHierarchy(resolve(source), {
-        stopAt,
-      });
-
-      // Log which files were loaded
+      const loadResult = loadHierarchy(resolve(source), { stopAt });
       const paths = loadResult.documents.map((d) => d.path);
       console.log(`Loading hierarchy: ${paths.length} file(s)`);
       for (const p of paths) {
         console.log(`  ← ${p}`);
       }
-
-      results = engine.syncDocument({
-        document: loadResult.merged,
-        tools: toolIds,
-        outputDir: outputDir ? resolve(outputDir) : dirname(resolve(source)),
-        dryRun,
-      });
+      doc = loadResult.merged;
     } else if (mergeScopes) {
-      // Load and merge documents from all scopes
-      const loadResult = loadScopes(resolve(source), {
-        team,
-        orgPath,
-        teamsDir,
-      });
-
-      // Log which scopes were loaded
+      // Load and merge documents from all scopes (CONF-004)
+      const loadResult = loadScopes(resolve(source), { team, orgPath, teamsDir });
       const scopeList = loadResult.documents.map((d) => d.scope).join(" → ");
       console.log(`Merging scopes: ${scopeList}`);
-
-      results = engine.syncDocument({
-        document: loadResult.merged,
-        tools: toolIds,
-        outputDir: outputDir ? resolve(outputDir) : dirname(resolve(source)),
-        dryRun,
-      });
-    } else {
-      results = engine.sync({
-        source: resolve(source),
-        tools: toolIds,
-        ...(outputDir ? { outputDir: resolve(outputDir) } : {}),
-        dryRun,
-      });
+      doc = loadResult.merged;
     }
+
+    // Expand @include directives if requested (CONF-006)
+    if (expandIncludes) {
+      const includeResult = processIncludes(doc.body, resolve(source));
+      if (includeResult.includedFiles.length > 0) {
+        console.log(`Expanded includes: ${includeResult.includedFiles.length} file(s)`);
+        for (const f of includeResult.includedFiles) {
+          console.log(`  + ${f}`);
+        }
+      }
+      for (const w of includeResult.warnings) {
+        console.warn(`  ⚠ ${w}`);
+      }
+      doc = { ...doc, body: includeResult.content };
+    }
+
+    // Sync the processed document
+    results = engine.syncDocument({
+      document: doc,
+      tools: toolIds,
+      outputDir: outputDir ? resolve(outputDir) : dirname(resolve(source)),
+      dryRun,
+    });
   } catch (err) {
     console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);

@@ -1,6 +1,8 @@
 export type { ToolAdapter } from "./adapter.js";
 export type { HierarchyLoadResult, HierarchyOptions } from "./hierarchy.js";
 export { findRootInstruction, loadHierarchy } from "./hierarchy.js";
+export type { IncludeOptions, IncludeResult } from "./include.js";
+export { extractIncludePaths, hasIncludes, processIncludes } from "./include.js";
 export type { FieldIssue } from "./parse.js";
 export { ParseError, parseCanonical, parseCanonicalString } from "./parse.js";
 export type { CanonicalInstruction, Frontmatter, ToolOverrides } from "./schema.js";

@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "laup": "./dist/bin.js"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -21,5 +24,12 @@
   "devDependencies": {
     "typescript": "*",
     "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "@laup/core": "workspace:*",
+    "@laup/config-hub": "workspace:*",
+    "@laup/claude-code": "workspace:*",
+    "@laup/cursor": "workspace:*",
+    "@laup/aider": "workspace:*"
   }
 }

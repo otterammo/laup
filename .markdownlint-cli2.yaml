@@ -6,6 +6,7 @@ ignores:
   - "dist/**"
   - "coverage/**"
   - "infra/data/**"
+  - ".claude/**"
 
 config:
   default: false

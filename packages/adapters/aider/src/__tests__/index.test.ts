@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseCanonicalString } from "@laup/core";

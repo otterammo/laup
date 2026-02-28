@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { parseCanonical, validateCanonical } from "@laup/core";
 import type { ToolAdapter, ValidationResult } from "@laup/core";
+import { parseCanonical, validateCanonical } from "@laup/core";
 
 export type { ValidationResult };
 

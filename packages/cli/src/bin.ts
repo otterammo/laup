@@ -4,8 +4,8 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { aiderAdapter } from "@laup/aider";
 import { claudeCodeAdapter } from "@laup/claude-code";
-import { SyncEngine } from "@laup/config-hub";
 import type { SyncResult } from "@laup/config-hub";
+import { SyncEngine } from "@laup/config-hub";
 import { validateCanonical } from "@laup/core";
 import { cursorAdapter } from "@laup/cursor";
 

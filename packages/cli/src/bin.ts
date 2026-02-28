@@ -6,7 +6,7 @@ import { aiderAdapter } from "@laup/aider";
 import { claudeCodeAdapter } from "@laup/claude-code";
 import type { SyncResult } from "@laup/config-hub";
 import { SyncEngine } from "@laup/config-hub";
-import { loadScopes, validateCanonical } from "@laup/core";
+import { loadHierarchy, loadScopes, validateCanonical } from "@laup/core";
 import { cursorAdapter } from "@laup/cursor";
 
 const ALL_ADAPTERS = [claudeCodeAdapter, cursorAdapter, aiderAdapter];
@@ -19,6 +19,8 @@ const { values: flags, positionals } = parseArgs({
     "output-dir": { type: "string", short: "o" },
     "dry-run": { type: "boolean", default: false },
     "merge-scopes": { type: "boolean", short: "m", default: false },
+    inherit: { type: "boolean", short: "i", default: false },
+    "stop-at": { type: "string" },
     team: { type: "string" },
     "org-path": { type: "string" },
     "teams-dir": { type: "string" },
@@ -41,6 +43,8 @@ Options for sync:
   --tools, -t        Comma-separated tool IDs (default: all registered adapters)
   --output-dir, -o   Target directory for output files (default: source file directory)
   --dry-run          Preview without writing any files
+  --inherit, -i      Load and merge parent directory instruction files (CONF-005)
+  --stop-at          Stop hierarchy traversal at this directory
   --merge-scopes, -m Merge org/team/project configs before syncing (CONF-004)
   --team             Team name for scope merging (overrides metadata.team)
   --org-path         Path to org config (default: ~/.config/laup/org.md)
@@ -87,6 +91,8 @@ if (command === "sync") {
   const outputDir = flags["output-dir"];
   const dryRun = flags["dry-run"] ?? false;
   const mergeScopes = flags["merge-scopes"] ?? false;
+  const inherit = flags.inherit ?? false;
+  const stopAt = flags["stop-at"];
   const team = flags.team;
   const orgPath = flags["org-path"];
   const teamsDir = flags["teams-dir"];
@@ -95,7 +101,26 @@ if (command === "sync") {
 
   let results: SyncResult[];
   try {
-    if (mergeScopes) {
+    if (inherit) {
+      // Load hierarchical instructions from parent directories (CONF-005)
+      const loadResult = loadHierarchy(resolve(source), {
+        stopAt,
+      });
+
+      // Log which files were loaded
+      const paths = loadResult.documents.map((d) => d.path);
+      console.log(`Loading hierarchy: ${paths.length} file(s)`);
+      for (const p of paths) {
+        console.log(`  ← ${p}`);
+      }
+
+      results = engine.syncDocument({
+        document: loadResult.merged,
+        tools: toolIds,
+        outputDir: outputDir ? resolve(outputDir) : dirname(resolve(source)),
+        dryRun,
+      });
+    } else if (mergeScopes) {
       // Load and merge documents from all scopes
       const loadResult = loadScopes(resolve(source), {
         team,

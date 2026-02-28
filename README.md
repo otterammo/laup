@@ -1,0 +1,170 @@
+# LAUP — LLM Agent Unification Platform
+
+> Write your project instructions once. Sync them everywhere.
+
+LAUP is a middleware layer that solves the configuration fragmentation problem that arises when development teams run multiple LLM coding agents simultaneously. Claude Code, Cursor, and Aider each require their own instruction file format. LAUP maintains a single canonical instruction file and propagates it to every tool automatically.
+
+## The Problem
+
+Running three agents means maintaining three instruction files — `CLAUDE.md`, `.cursorrules`, `.aider.conf.yml` — that diverge the moment anyone edits one of them. Teams either accept drift or manually synchronize files that should be identical.
+
+## The Solution
+
+```text
+laup.md  →  laup sync  →  CLAUDE.md
+                       →  .cursorrules
+                       →  .cursor/rules/laup.mdc
+                       →  .aider.conf.yml + CONVENTIONS.md
+```
+
+One source of truth. One command to propagate.
+
+## Quick Start
+
+**Prerequisites:** Node.js ≥ 22, pnpm ≥ 9
+
+```bash
+# Build from source
+git clone https://github.com/your-org/laup
+cd laup
+pnpm install
+pnpm run build
+
+# Create a canonical instruction file
+cat > laup.md << 'EOF'
+---
+version: "1.0"
+scope: project
+---
+# My Project
+
+Always use TypeScript strict mode.
+Prefer functional patterns over class-based patterns.
+Run tests before committing.
+EOF
+
+# Sync to all supported tools
+node packages/cli/dist/bin.js sync --source laup.md --tools claude-code,cursor,aider
+```
+
+## Canonical Instruction File Format
+
+`laup.md` uses standard Markdown with an optional YAML frontmatter block.
+
+```markdown
+---
+version: "1.0"
+scope: project          # project | workspace | global
+
+# Optional per-tool overrides
+tools:
+  cursor:
+    globs:
+      - "src/**/*.ts"
+    alwaysApply: false
+  aider:
+    model: claude-sonnet-4-6
+    autoCommits: false
+  claude-code:
+    deniedTools:
+      - "Bash(git push*)"
+
+# Optional global permissions
+permissions:
+  deniedTools:
+    - "Bash(rm -rf*)"
+  approvalRequired:
+    - deployments
+---
+
+# Your instructions here
+
+Write your project instructions in plain Markdown. This body is rendered
+into every tool-specific output file verbatim.
+```
+
+The frontmatter is optional — a plain Markdown file with no `---` block is valid and uses defaults (`version: "1.0"`, `scope: project`).
+
+## CLI Reference
+
+```
+laup sync      Sync canonical instruction file to tool-specific output files
+laup validate  Validate a canonical instruction file against the schema
+
+Options for sync:
+  --source, -s      Path to canonical instruction file (required)
+  --tools, -t       Comma-separated tool IDs (default: all registered adapters)
+  --output-dir, -o  Target directory for output files (default: source file directory)
+  --dry-run         Preview without writing any files
+
+Options for validate:
+  --source, -s      Path to canonical instruction file (required)
+```
+
+### Examples
+
+```bash
+# Sync all tools
+laup sync --source laup.md
+
+# Sync specific tools only
+laup sync --source laup.md --tools claude-code,cursor
+
+# Preview what would be written without touching the filesystem
+laup sync --source laup.md --dry-run
+
+# Write output to a different directory
+laup sync --source laup.md --output-dir /path/to/project
+
+# Validate before syncing
+laup validate --source laup.md && laup sync --source laup.md
+```
+
+## Supported Tools
+
+| Tool | Output file(s) | Format |
+|---|---|---|
+| `claude-code` | `CLAUDE.md` | Markdown pass-through |
+| `cursor` | `.cursorrules`, `.cursor/rules/laup.mdc` | Legacy Markdown + MDC (dual-format) |
+| `aider` | `.aider.conf.yml`, `CONVENTIONS.md` | YAML config + Markdown conventions |
+
+## Repository Structure
+
+```
+laup/
+├── packages/
+│   ├── core/                # Canonical schema, ToolAdapter interface, parse/validate
+│   ├── config-hub/          # SyncEngine — orchestrates adapters
+│   ├── cli/                 # laup CLI (laup sync, laup validate)
+│   └── adapters/
+│       ├── claude-code/     # CLAUDE.md renderer
+│       ├── cursor/          # .cursorrules + .cursor/rules/laup.mdc renderer
+│       └── aider/           # .aider.conf.yml + CONVENTIONS.md renderer
+├── infra/
+│   └── docker-compose.yml   # PostgreSQL+pgvector, Redis, Vault (for Phase 2)
+└── docs/                    # Architecture and requirements docs
+```
+
+## Development
+
+```bash
+pnpm install          # Install dependencies
+pnpm run build        # Compile all packages
+pnpm run test:run     # Run all tests (74 tests, run from root)
+pnpm run typecheck    # TypeScript strict check across all packages
+pnpm run lint         # Biome lint + format check
+pnpm run lint:fix     # Auto-fix lint issues
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
+
+## Roadmap
+
+LAUP's kernel (configuration sync) is Phase 1. The full platform adds:
+
+- **Phase 2:** Skill Library (portable slash commands), Memory Layer (pgvector), Permission Engine (Cedar WASM), MCP Registry (single-registration), Agent Handoff (Redis transport)
+- **Phase 3:** Cost & Observability (OTel), additional adapters (Gemini CLI, Windsurf, Continue, OpenCode, GitHub Copilot, Devin)
+
+## License
+
+MIT

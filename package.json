@@ -2,7 +2,7 @@
   "name": "laup",
   "version": "0.0.0",
   "private": true,
-  "description": "LLM Agent Unification Platform — monorepo root",
+  "description": "LLM Agent Unification Provider — monorepo root",
   "scripts": {
     "build": "pnpm -r run build",
     "test": "vitest",

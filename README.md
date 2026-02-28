@@ -1,4 +1,4 @@
-# LAUP — LLM Agent Unification Platform
+# LAUP — LLM Agent Unification Provider
 
 > Write your project instructions once. Sync them everywhere.
 

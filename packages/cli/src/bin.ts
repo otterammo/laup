@@ -26,7 +26,7 @@ const { values: flags, positionals } = parseArgs({
 const command = positionals[0];
 
 if (!command || flags.help) {
-  console.log(`laup — LLM Agent Unification Platform
+  console.log(`laup — LLM Agent Unification Provider
 
 Commands:
   sync      Sync canonical instruction file to tool-specific output files

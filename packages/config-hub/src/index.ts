@@ -13,6 +13,14 @@ export interface SyncResult {
   error?: string;
 }
 
+export interface PreviewResult {
+  tool: string;
+  success: boolean;
+  /** Rendered content for each output file. Array for tools with multiple outputs. */
+  content: string[];
+  error?: string;
+}
+
 export interface SyncOptions {
   /** Absolute or relative path to the canonical instruction file. */
   source: string;
@@ -125,6 +133,44 @@ export class SyncEngine {
           tool: toolId,
           success: false,
           paths: [],
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Preview rendered output for each tool without writing files.
+   * Returns the rendered content for inspection/display (CONF-016).
+   */
+  preview(document: CanonicalInstruction, tools: string[] = []): PreviewResult[] {
+    const toolIds = tools.length > 0 ? tools : this.registeredTools;
+    const results: PreviewResult[] = [];
+
+    for (const toolId of toolIds) {
+      const adapter = this.adapters.get(toolId);
+      if (!adapter) {
+        results.push({
+          tool: toolId,
+          success: false,
+          content: [],
+          error: `No adapter registered for tool: ${toolId}`,
+        });
+        continue;
+      }
+
+      try {
+        const rendered = adapter.render(document);
+        // Normalize to array for consistent handling
+        const contentArray = Array.isArray(rendered) ? rendered : [rendered];
+        results.push({ tool: toolId, success: true, content: contentArray });
+      } catch (err) {
+        results.push({
+          tool: toolId,
+          success: false,
+          content: [],
           error: err instanceof Error ? err.message : String(err),
         });
       }

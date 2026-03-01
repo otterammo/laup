@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   getDeprecationNotice,
+  isNamespacedSkill,
   isSkillDeprecated,
   parseSkill,
+  parseSkillName,
+  qualifySkillName,
   renderSkillPrompt,
   type Skill,
+  skillBelongsToNamespace,
+  skillNamesEqual,
   validateSkill,
+  validateSkillNamespace,
 } from "../skill-schema.js";
 
 describe("skill-schema", () => {
@@ -273,6 +279,74 @@ prompt: Hello {{name}}
         },
       });
       expect(result.valid).toBe(true);
+    });
+  });
+
+  describe("namespace isolation (SKILL-007)", () => {
+    it("parseSkillName parses namespaced skill", () => {
+      const result = parseSkillName("acme-corp/code-review");
+      expect(result.namespace).toBe("acme-corp");
+      expect(result.name).toBe("code-review");
+      expect(result.fullName).toBe("acme-corp/code-review");
+    });
+
+    it("parseSkillName parses unnamespaced skill", () => {
+      const result = parseSkillName("code-review");
+      expect(result.namespace).toBeUndefined();
+      expect(result.name).toBe("code-review");
+      expect(result.fullName).toBe("code-review");
+    });
+
+    it("isNamespacedSkill returns true for namespaced", () => {
+      expect(isNamespacedSkill("acme/skill")).toBe(true);
+    });
+
+    it("isNamespacedSkill returns false for unnamespaced", () => {
+      expect(isNamespacedSkill("skill")).toBe(false);
+    });
+
+    it("validateSkillNamespace passes for namespaced skill", () => {
+      const skill: Skill = {
+        ...validSkill,
+        name: "acme-corp/code-review",
+      };
+      const result = validateSkillNamespace(skill);
+      expect(result.valid).toBe(true);
+    });
+
+    it("validateSkillNamespace fails for unnamespaced skill", () => {
+      const result = validateSkillNamespace(validSkill);
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("must be namespaced");
+    });
+
+    it("validateSkillNamespace fails for invalid namespace", () => {
+      const skill: Skill = {
+        ...validSkill,
+        name: "123invalid/skill",
+      };
+      const result = validateSkillNamespace(skill);
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("Invalid namespace");
+    });
+
+    it("qualifySkillName adds namespace to unnamespaced", () => {
+      expect(qualifySkillName("acme", "my-skill")).toBe("acme/my-skill");
+    });
+
+    it("qualifySkillName preserves existing namespace", () => {
+      expect(qualifySkillName("acme", "other/my-skill")).toBe("other/my-skill");
+    });
+
+    it("skillNamesEqual compares case-insensitively", () => {
+      expect(skillNamesEqual("Acme/Skill", "acme/skill")).toBe(true);
+      expect(skillNamesEqual("acme/skill", "other/skill")).toBe(false);
+    });
+
+    it("skillBelongsToNamespace checks namespace ownership", () => {
+      expect(skillBelongsToNamespace("acme/skill", "acme")).toBe(true);
+      expect(skillBelongsToNamespace("acme/skill", "other")).toBe(false);
+      expect(skillBelongsToNamespace("skill", "acme")).toBe(false);
     });
   });
 });

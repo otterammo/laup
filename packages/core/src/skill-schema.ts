@@ -112,6 +112,34 @@ export const SkillMetadataSchema = z.object({
 export type SkillMetadata = z.infer<typeof SkillMetadataSchema>;
 
 /**
+ * Deprecation information for a skill (SKILL-012).
+ */
+export const SkillDeprecationSchema = z.object({
+  /** Whether the skill is deprecated */
+  deprecated: z.boolean().default(false),
+
+  /** Human-readable deprecation message */
+  message: z.string().optional(),
+
+  /** Replacement skill ID (namespace/name format) */
+  replacement: z.string().optional(),
+
+  /** Date when skill was deprecated */
+  since: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be ISO 8601 format YYYY-MM-DD")
+    .optional(),
+
+  /** Date when skill will be removed (optional sunset date) */
+  removeBy: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be ISO 8601 format YYYY-MM-DD")
+    .optional(),
+});
+
+export type SkillDeprecation = z.infer<typeof SkillDeprecationSchema>;
+
+/**
  * Tool-specific override for skill rendering.
  */
 export const SkillToolOverrideSchema = z.record(z.string(), z.unknown());
@@ -163,6 +191,9 @@ export const SkillSchema = z.object({
 
   /** Tool-specific overrides */
   tools: z.record(z.string(), SkillToolOverrideSchema).optional(),
+
+  /** Deprecation information (SKILL-012) */
+  deprecation: SkillDeprecationSchema.optional(),
 });
 
 export type Skill = z.infer<typeof SkillSchema>;
@@ -246,4 +277,37 @@ export function renderSkillPrompt(skill: Skill, params: Record<string, unknown> 
   }
 
   return prompt;
+}
+
+/**
+ * Check if a skill is deprecated.
+ */
+export function isSkillDeprecated(skill: Skill): boolean {
+  return skill.deprecation?.deprecated === true;
+}
+
+/**
+ * Get deprecation notice for a skill.
+ * Returns null if skill is not deprecated.
+ */
+export function getDeprecationNotice(skill: Skill): string | null {
+  if (!isSkillDeprecated(skill)) {
+    return null;
+  }
+
+  const parts: string[] = [`⚠️ DEPRECATED: ${skill.name}`];
+
+  if (skill.deprecation?.message) {
+    parts.push(skill.deprecation.message);
+  }
+
+  if (skill.deprecation?.replacement) {
+    parts.push(`Use "${skill.deprecation.replacement}" instead.`);
+  }
+
+  if (skill.deprecation?.removeBy) {
+    parts.push(`Will be removed on ${skill.deprecation.removeBy}.`);
+  }
+
+  return parts.join(" ");
 }

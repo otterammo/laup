@@ -50,6 +50,22 @@ export {
   UsageEventTypeSchema,
 } from "./cost-schema.js";
 export type {
+  CredentialAccess,
+  CredentialMetadata,
+  CredentialQueryFilter,
+  CredentialStore,
+  CredentialType,
+  EncryptionProvider,
+  StoredCredential,
+} from "./credential-store.js";
+export {
+  CredentialTypeSchema,
+  createCredentialStore,
+  InMemoryCredentialStore,
+  SqlCredentialStore,
+  TestEncryptionProvider,
+} from "./credential-store.js";
+export type {
   DbAdapter,
   DbConnectionOptions,
   DbHealthStatus,

@@ -186,5 +186,19 @@ export {
   satisfiesConstraint,
   sortVersionsDesc,
 } from "./skill-version.js";
+export type {
+  AggregatedUsage,
+  PaginatedResult,
+  PaginationOptions,
+  TimeBucket,
+  UsageQueryFilter,
+  UsageStorage,
+  UsageSummary,
+} from "./usage-storage.js";
+export {
+  createUsageStorage,
+  InMemoryUsageStorage,
+  SqlUsageStorage,
+} from "./usage-storage.js";
 export type { ValidationIssue, ValidationResult } from "./validate.js";
 export { validateCanonical } from "./validate.js";

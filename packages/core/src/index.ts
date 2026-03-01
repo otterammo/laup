@@ -1,5 +1,25 @@
 export type { ToolAdapter, ToolCategory } from "./adapter.js";
 export type {
+  AuditCategory,
+  AuditEntry,
+  AuditExportOptions,
+  AuditPage,
+  AuditQueryFilter,
+  AuditSeverity,
+  AuditStats,
+  AuditStorage,
+} from "./audit-storage.js";
+export {
+  AuditCategorySchema,
+  AuditEntrySchema,
+  AuditSeveritySchema,
+  auditConfigChange,
+  auditSecurityEvent,
+  createAuditStorage,
+  InMemoryAuditStorage,
+  SqlAuditStorage,
+} from "./audit-storage.js";
+export type {
   BudgetAlert,
   CostCap,
   CostSummary,

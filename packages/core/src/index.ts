@@ -23,8 +23,10 @@ export {
   skillRenderers,
 } from "./skill-renderer.js";
 export type {
+  AccessContext,
   CircularDependencyResult,
   Skill,
+  SkillAccessControl,
   SkillDeprecation,
   SkillMetadata,
   SkillNamespace,
@@ -34,11 +36,16 @@ export type {
   SkillToolOverride,
   SkillTrigger,
   SkillValidationResult,
+  SkillVisibility,
 } from "./skill-schema.js";
 export {
+  canAccessSkill,
+  canForkSkill,
+  canInstallSkill,
   detectCircularDependency,
   getComposedSkillDependencies,
   getDeprecationNotice,
+  getSkillVisibility,
   isComposedSkill,
   isNamespacedSkill,
   isSkillDeprecated,
@@ -47,6 +54,7 @@ export {
   qualifySkillName,
   renderSkillPrompt,
   resolveStepParams,
+  SkillAccessControlSchema,
   SkillDeprecationSchema,
   SkillMetadataSchema,
   SkillParameterSchema,
@@ -55,6 +63,7 @@ export {
   SkillStepSchema,
   SkillToolOverrideSchema,
   SkillTriggerSchema,
+  SkillVisibilitySchema,
   skillBelongsToNamespace,
   skillNamesEqual,
   validateSkill,

@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  type AccessContext,
+  canAccessSkill,
+  canForkSkill,
+  canInstallSkill,
   detectCircularDependency,
   getComposedSkillDependencies,
   getDeprecationNotice,
+  getSkillVisibility,
   isComposedSkill,
   isNamespacedSkill,
   isSkillDeprecated,
@@ -452,6 +457,116 @@ prompt: Hello {{name}}
           { skill: "acme/helper", params: { x: "y" }, args: { mode: "fast" }, as: "helper-result" },
           { skill: "acme/final", when: "helper-result.success" },
         ],
+      });
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe("access control (SKILL-010)", () => {
+    it("getSkillVisibility returns default org-private", () => {
+      expect(getSkillVisibility(validSkill)).toBe("org-private");
+    });
+
+    it("getSkillVisibility returns configured visibility", () => {
+      const skill: Skill = {
+        ...validSkill,
+        access: { visibility: "public" },
+      };
+      expect(getSkillVisibility(skill)).toBe("public");
+    });
+
+    it("canAccessSkill allows public skills for anyone", () => {
+      const skill: Skill = {
+        ...validSkill,
+        access: { visibility: "public" },
+      };
+      const result = canAccessSkill(skill, "acme", {});
+      expect(result.allowed).toBe(true);
+    });
+
+    it("canAccessSkill allows org-private for same org", () => {
+      const skill: Skill = {
+        ...validSkill,
+        access: { visibility: "org-private" },
+      };
+      const result = canAccessSkill(skill, "acme", { orgId: "acme" });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("canAccessSkill denies org-private for different org", () => {
+      const skill: Skill = {
+        ...validSkill,
+        access: { visibility: "org-private" },
+      };
+      const result = canAccessSkill(skill, "acme", { orgId: "other" });
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("private to organization");
+    });
+
+    it("canAccessSkill allows team-private for team members", () => {
+      const skill: Skill = {
+        ...validSkill,
+        access: { visibility: "team-private", allowedTeams: ["team-a", "team-b"] },
+      };
+      const context: AccessContext = { teamIds: ["team-b"] };
+      const result = canAccessSkill(skill, "acme", context);
+      expect(result.allowed).toBe(true);
+    });
+
+    it("canAccessSkill denies team-private for non-members", () => {
+      const skill: Skill = {
+        ...validSkill,
+        access: { visibility: "team-private", allowedTeams: ["team-a"] },
+      };
+      const context: AccessContext = { teamIds: ["team-c"] };
+      const result = canAccessSkill(skill, "acme", context);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("restricted to specific teams");
+    });
+
+    it("canAccessSkill allows project-private for project members", () => {
+      const skill: Skill = {
+        ...validSkill,
+        access: { visibility: "project-private", allowedProjects: ["proj-1"] },
+      };
+      const context: AccessContext = { projectIds: ["proj-1"] };
+      const result = canAccessSkill(skill, "acme", context);
+      expect(result.allowed).toBe(true);
+    });
+
+    it("canInstallSkill returns true by default", () => {
+      expect(canInstallSkill(validSkill)).toBe(true);
+    });
+
+    it("canInstallSkill respects allowInstall flag", () => {
+      const skill: Skill = {
+        ...validSkill,
+        access: { visibility: "public", allowInstall: false },
+      };
+      expect(canInstallSkill(skill)).toBe(false);
+    });
+
+    it("canForkSkill returns true by default", () => {
+      expect(canForkSkill(validSkill)).toBe(true);
+    });
+
+    it("canForkSkill respects allowFork flag", () => {
+      const skill: Skill = {
+        ...validSkill,
+        access: { visibility: "public", allowFork: false },
+      };
+      expect(canForkSkill(skill)).toBe(false);
+    });
+
+    it("validates access control schema", () => {
+      const result = validateSkill({
+        ...validSkill,
+        access: {
+          visibility: "team-private",
+          allowedTeams: ["team-a", "team-b"],
+          allowInstall: true,
+          allowFork: false,
+        },
       });
       expect(result.valid).toBe(true);
     });

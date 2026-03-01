@@ -169,6 +169,40 @@ export const SkillStepSchema = z.object({
 export type SkillStep = z.infer<typeof SkillStepSchema>;
 
 /**
+ * Skill visibility levels (SKILL-010).
+ */
+export const SkillVisibilitySchema = z.enum([
+  "public", // Visible in marketplace to everyone
+  "org-private", // Visible only within the publishing organization
+  "team-private", // Visible only within a specific team
+  "project-private", // Visible only within a specific project
+]);
+
+export type SkillVisibility = z.infer<typeof SkillVisibilitySchema>;
+
+/**
+ * Access control configuration for a skill (SKILL-010).
+ */
+export const SkillAccessControlSchema = z.object({
+  /** Visibility level */
+  visibility: SkillVisibilitySchema.optional(),
+
+  /** Allowed team IDs (for team-private visibility) */
+  allowedTeams: z.array(z.string()).optional(),
+
+  /** Allowed project IDs (for project-private visibility) */
+  allowedProjects: z.array(z.string()).optional(),
+
+  /** Allow installation without explicit approval */
+  allowInstall: z.boolean().optional(),
+
+  /** Allow forking/copying */
+  allowFork: z.boolean().optional(),
+});
+
+export type SkillAccessControl = z.infer<typeof SkillAccessControlSchema>;
+
+/**
  * Portable skill definition.
  */
 export const SkillSchema = z.object({
@@ -219,6 +253,9 @@ export const SkillSchema = z.object({
 
   /** Composed skill steps (SKILL-008) */
   steps: z.array(SkillStepSchema).optional(),
+
+  /** Access control (SKILL-010) */
+  access: SkillAccessControlSchema.optional(),
 });
 
 export type Skill = z.infer<typeof SkillSchema>;
@@ -537,4 +574,94 @@ export function resolveStepParams(
   }
 
   return resolved;
+}
+
+/**
+ * Access check context for evaluating skill visibility.
+ */
+export interface AccessContext {
+  /** ID of the user requesting access */
+  userId?: string;
+  /** Organization ID of the requester */
+  orgId?: string;
+  /** Team IDs the requester belongs to */
+  teamIds?: string[];
+  /** Project IDs the requester has access to */
+  projectIds?: string[];
+}
+
+/**
+ * Get the effective visibility of a skill.
+ */
+export function getSkillVisibility(skill: Skill): SkillVisibility {
+  return skill.access?.visibility ?? "org-private";
+}
+
+/**
+ * Check if a user can access a skill based on visibility rules.
+ */
+export function canAccessSkill(
+  skill: Skill,
+  skillOrgId: string,
+  context: AccessContext,
+): { allowed: boolean; reason?: string } {
+  const visibility = getSkillVisibility(skill);
+
+  // Public skills are accessible to everyone
+  if (visibility === "public") {
+    return { allowed: true };
+  }
+
+  // Org-private requires same org
+  if (visibility === "org-private") {
+    if (context.orgId === skillOrgId) {
+      return { allowed: true };
+    }
+    return {
+      allowed: false,
+      reason: `Skill "${skill.name}" is private to organization "${skillOrgId}"`,
+    };
+  }
+
+  // Team-private requires team membership
+  if (visibility === "team-private") {
+    const allowedTeams = skill.access?.allowedTeams ?? [];
+    const hasTeamAccess = context.teamIds?.some((t) => allowedTeams.includes(t));
+    if (hasTeamAccess) {
+      return { allowed: true };
+    }
+    return {
+      allowed: false,
+      reason: `Skill "${skill.name}" is restricted to specific teams`,
+    };
+  }
+
+  // Project-private requires project access
+  if (visibility === "project-private") {
+    const allowedProjects = skill.access?.allowedProjects ?? [];
+    const hasProjectAccess = context.projectIds?.some((p) => allowedProjects.includes(p));
+    if (hasProjectAccess) {
+      return { allowed: true };
+    }
+    return {
+      allowed: false,
+      reason: `Skill "${skill.name}" is restricted to specific projects`,
+    };
+  }
+
+  return { allowed: false, reason: "Unknown visibility level" };
+}
+
+/**
+ * Check if a skill allows installation.
+ */
+export function canInstallSkill(skill: Skill): boolean {
+  return skill.access?.allowInstall !== false;
+}
+
+/**
+ * Check if a skill allows forking.
+ */
+export function canForkSkill(skill: Skill): boolean {
+  return skill.access?.allowFork !== false;
 }

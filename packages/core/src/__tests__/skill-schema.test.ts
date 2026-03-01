@@ -7,7 +7,9 @@ import {
   detectCircularDependency,
   getComposedSkillDependencies,
   getDeprecationNotice,
+  getRunnableTests,
   getSkillVisibility,
+  hasTests,
   isComposedSkill,
   isNamespacedSkill,
   isSkillDeprecated,
@@ -16,8 +18,10 @@ import {
   qualifySkillName,
   renderSkillPrompt,
   resolveStepParams,
+  runAssertion,
   type Skill,
   type SkillStep,
+  type SkillTestAssertion,
   skillBelongsToNamespace,
   skillNamesEqual,
   validateSkill,
@@ -568,6 +572,80 @@ prompt: Hello {{name}}
           allowFork: false,
         },
       });
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe("testing framework (SKILL-009)", () => {
+    const skillWithTests: Skill = {
+      ...validSkill,
+      tests: [
+        {
+          name: "basic test",
+          params: { language: "typescript" },
+          expect: [{ type: "contains", value: "review" }],
+        },
+        {
+          name: "skipped test",
+          params: {},
+          expect: [{ type: "equals", value: "exact" }],
+          skip: true,
+        },
+      ],
+    };
+
+    it("hasTests returns false for skill without tests", () => {
+      expect(hasTests(validSkill)).toBe(false);
+    });
+
+    it("hasTests returns true for skill with tests", () => {
+      expect(hasTests(skillWithTests)).toBe(true);
+    });
+
+    it("getRunnableTests filters out skipped tests", () => {
+      const runnable = getRunnableTests(skillWithTests);
+      expect(runnable).toHaveLength(1);
+      expect(runnable[0]?.name).toBe("basic test");
+    });
+
+    it("runAssertion passes contains assertion", () => {
+      const assertion: SkillTestAssertion = { type: "contains", value: "hello" };
+      const result = runAssertion(assertion, "hello world");
+      expect(result.passed).toBe(true);
+    });
+
+    it("runAssertion fails contains assertion", () => {
+      const assertion: SkillTestAssertion = { type: "contains", value: "goodbye" };
+      const result = runAssertion(assertion, "hello world");
+      expect(result.passed).toBe(false);
+    });
+
+    it("runAssertion passes equals assertion", () => {
+      const assertion: SkillTestAssertion = { type: "equals", value: "exact match" };
+      const result = runAssertion(assertion, "exact match");
+      expect(result.passed).toBe(true);
+    });
+
+    it("runAssertion passes matches assertion", () => {
+      const assertion: SkillTestAssertion = { type: "matches", value: "\\d{3}-\\d{4}" };
+      const result = runAssertion(assertion, "Call 555-1234 now");
+      expect(result.passed).toBe(true);
+    });
+
+    it("runAssertion passes json-path assertion", () => {
+      const assertion: SkillTestAssertion = { type: "json-path", path: "$.status", value: "ok" };
+      const result = runAssertion(assertion, '{"status": "ok", "count": 5}');
+      expect(result.passed).toBe(true);
+    });
+
+    it("runAssertion handles NOT assertion", () => {
+      const assertion: SkillTestAssertion = { type: "contains", value: "error", not: true };
+      const result = runAssertion(assertion, "success response");
+      expect(result.passed).toBe(true);
+    });
+
+    it("validates skill with test cases", () => {
+      const result = validateSkill(skillWithTests);
       expect(result.valid).toBe(true);
     });
   });

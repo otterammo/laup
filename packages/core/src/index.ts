@@ -30,6 +30,18 @@ export {
   UsageEventTypeSchema,
 } from "./cost-schema.js";
 export type {
+  DbAdapter,
+  DbConnectionOptions,
+  DbHealthStatus,
+  QueryResult,
+  Transaction,
+} from "./db-adapter.js";
+export {
+  BaseDbAdapter,
+  createDbAdapter,
+  InMemoryDbAdapter,
+} from "./db-adapter.js";
+export type {
   ContextField,
   ContextPacket,
   HandoffAck,

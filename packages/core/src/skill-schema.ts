@@ -311,3 +311,101 @@ export function getDeprecationNotice(skill: Skill): string | null {
 
   return parts.join(" ");
 }
+
+/**
+ * Parsed skill namespace components (SKILL-007).
+ */
+export interface SkillNamespace {
+  /** Organization/owner namespace (undefined if unnamespaced) */
+  namespace?: string;
+  /** Skill name within the namespace */
+  name: string;
+  /** Full qualified name (namespace/name or just name) */
+  fullName: string;
+}
+
+/**
+ * Parse a skill name into namespace components.
+ */
+export function parseSkillName(skillName: string): SkillNamespace {
+  const parts = skillName.split("/");
+  if (parts.length === 2 && parts[0] && parts[1]) {
+    return {
+      namespace: parts[0],
+      name: parts[1],
+      fullName: skillName,
+    };
+  }
+  return {
+    name: skillName,
+    fullName: skillName,
+  };
+}
+
+/**
+ * Check if a skill name is namespaced.
+ */
+export function isNamespacedSkill(skillName: string): boolean {
+  return skillName.includes("/");
+}
+
+/**
+ * Validate that a skill has a namespace (required for publishing).
+ */
+export function validateSkillNamespace(skill: Skill): {
+  valid: boolean;
+  error?: string;
+} {
+  const parsed = parseSkillName(skill.name);
+
+  if (!parsed.namespace) {
+    return {
+      valid: false,
+      error: `Skill "${skill.name}" must be namespaced (e.g., "org-name/${skill.name}") for publishing`,
+    };
+  }
+
+  // Validate namespace format
+  if (!/^[a-z][a-z0-9-]*$/i.test(parsed.namespace)) {
+    return {
+      valid: false,
+      error: `Invalid namespace "${parsed.namespace}": must be alphanumeric with hyphens`,
+    };
+  }
+
+  // Validate name format
+  if (!/^[a-z][a-z0-9-]*$/i.test(parsed.name)) {
+    return {
+      valid: false,
+      error: `Invalid skill name "${parsed.name}": must be alphanumeric with hyphens`,
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Qualify a skill name with a namespace.
+ */
+export function qualifySkillName(namespace: string, name: string): string {
+  // If already namespaced, return as-is
+  if (name.includes("/")) {
+    return name;
+  }
+  return `${namespace}/${name}`;
+}
+
+/**
+ * Check if two skill names refer to the same skill.
+ */
+export function skillNamesEqual(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+/**
+ * Check if a skill belongs to a namespace.
+ */
+export function skillBelongsToNamespace(skillName: string, namespace: string): boolean {
+  const parsed = parseSkillName(skillName);
+  return parsed.namespace?.toLowerCase() === namespace.toLowerCase();
+}

@@ -26,6 +26,7 @@ export type {
   Skill,
   SkillDeprecation,
   SkillMetadata,
+  SkillNamespace,
   SkillParameter,
   SkillParameterType,
   SkillToolOverride,
@@ -34,8 +35,11 @@ export type {
 } from "./skill-schema.js";
 export {
   getDeprecationNotice,
+  isNamespacedSkill,
   isSkillDeprecated,
   parseSkill,
+  parseSkillName,
+  qualifySkillName,
   renderSkillPrompt,
   SkillDeprecationSchema,
   SkillMetadataSchema,
@@ -44,7 +48,10 @@ export {
   SkillSchema,
   SkillToolOverrideSchema,
   SkillTriggerSchema,
+  skillBelongsToNamespace,
+  skillNamesEqual,
   validateSkill,
+  validateSkillNamespace,
 } from "./skill-schema.js";
 export type { SemanticVersion, VersionConstraint } from "./skill-version.js";
 export {

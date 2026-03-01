@@ -1,4 +1,34 @@
 export type { ToolAdapter, ToolCategory } from "./adapter.js";
+export type {
+  BudgetAlert,
+  CostCap,
+  CostSummary,
+  LlmUsage,
+  McpInvocationUsage,
+  MemoryOperationUsage,
+  ModelPricing,
+  SkillInvocationUsage,
+  UsageAttribution,
+  UsageEvent,
+  UsageEventType,
+} from "./cost-schema.js";
+export {
+  aggregateUsage,
+  BudgetAlertSchema,
+  CostCapSchema,
+  CostSummarySchema,
+  calculateLlmCost,
+  isCostCapExceeded,
+  LlmUsageSchema,
+  McpInvocationUsageSchema,
+  MemoryOperationUsageSchema,
+  ModelPricingSchema,
+  SkillInvocationUsageSchema,
+  shouldFireAlert,
+  UsageAttributionSchema,
+  UsageEventSchema,
+  UsageEventTypeSchema,
+} from "./cost-schema.js";
 export type { HierarchyLoadResult, HierarchyOptions } from "./hierarchy.js";
 export { findRootInstruction, loadHierarchy } from "./hierarchy.js";
 export type { ImportFormat, ImportResult } from "./import.js";

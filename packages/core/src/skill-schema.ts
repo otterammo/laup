@@ -203,6 +203,47 @@ export const SkillAccessControlSchema = z.object({
 export type SkillAccessControl = z.infer<typeof SkillAccessControlSchema>;
 
 /**
+ * Expected output assertion for a test case (SKILL-009).
+ */
+export const SkillTestAssertionSchema = z.object({
+  /** Type of assertion */
+  type: z.enum(["contains", "equals", "matches", "json-path"]),
+
+  /** Expected value or pattern */
+  value: z.string(),
+
+  /** JSON path for json-path assertions */
+  path: z.string().optional(),
+
+  /** Whether the assertion is negated (must NOT match) */
+  not: z.boolean().optional(),
+});
+
+export type SkillTestAssertion = z.infer<typeof SkillTestAssertionSchema>;
+
+/**
+ * A test case for a skill (SKILL-009).
+ */
+export const SkillTestCaseSchema = z.object({
+  /** Test case name/description */
+  name: z.string(),
+
+  /** Input parameters for the test */
+  params: z.record(z.string(), z.unknown()).optional(),
+
+  /** Expected output assertions */
+  expect: z.array(SkillTestAssertionSchema),
+
+  /** Whether to skip this test */
+  skip: z.boolean().optional(),
+
+  /** Tool-specific test configuration */
+  toolConfig: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type SkillTestCase = z.infer<typeof SkillTestCaseSchema>;
+
+/**
  * Portable skill definition.
  */
 export const SkillSchema = z.object({
@@ -256,6 +297,9 @@ export const SkillSchema = z.object({
 
   /** Access control (SKILL-010) */
   access: SkillAccessControlSchema.optional(),
+
+  /** Test cases for skill validation (SKILL-009) */
+  tests: z.array(SkillTestCaseSchema).optional(),
 });
 
 export type Skill = z.infer<typeof SkillSchema>;
@@ -664,4 +708,129 @@ export function canInstallSkill(skill: Skill): boolean {
  */
 export function canForkSkill(skill: Skill): boolean {
   return skill.access?.allowFork !== false;
+}
+
+/**
+ * Result of a single test assertion.
+ */
+export interface AssertionResult {
+  passed: boolean;
+  assertion: SkillTestAssertion;
+  actual?: string;
+  message?: string;
+}
+
+/**
+ * Result of running a test case.
+ */
+export interface TestCaseResult {
+  name: string;
+  passed: boolean;
+  skipped: boolean;
+  assertions: AssertionResult[];
+  duration?: number;
+  error?: string;
+}
+
+/**
+ * Result of running all tests for a skill.
+ */
+export interface SkillTestResult {
+  skill: string;
+  passed: boolean;
+  total: number;
+  passed_count: number;
+  failed_count: number;
+  skipped_count: number;
+  cases: TestCaseResult[];
+}
+
+/**
+ * Run a single assertion against output.
+ */
+export function runAssertion(assertion: SkillTestAssertion, output: string): AssertionResult {
+  let matched = false;
+
+  switch (assertion.type) {
+    case "contains":
+      matched = output.includes(assertion.value);
+      break;
+    case "equals":
+      matched = output.trim() === assertion.value.trim();
+      break;
+    case "matches":
+      try {
+        const regex = new RegExp(assertion.value);
+        matched = regex.test(output);
+      } catch {
+        return {
+          passed: false,
+          assertion,
+          message: `Invalid regex: ${assertion.value}`,
+        };
+      }
+      break;
+    case "json-path":
+      try {
+        const json = JSON.parse(output);
+        const path = assertion.path ?? "$";
+        const value = path === "$" ? json : getJsonPath(json, path);
+        matched = String(value) === assertion.value;
+      } catch {
+        return {
+          passed: false,
+          assertion,
+          actual: output.slice(0, 100),
+          message: "Failed to parse output as JSON",
+        };
+      }
+      break;
+  }
+
+  if (assertion.not) {
+    matched = !matched;
+  }
+
+  const result: AssertionResult = {
+    passed: matched,
+    assertion,
+    actual: output.slice(0, 200),
+  };
+
+  if (!matched) {
+    result.message = `Expected ${assertion.not ? "NOT " : ""}${assertion.type}: ${assertion.value}`;
+  }
+
+  return result;
+}
+
+/**
+ * Simple JSON path getter.
+ */
+function getJsonPath(obj: unknown, path: string): unknown {
+  const parts = path.replace(/^\$\.?/, "").split(".");
+  let current: unknown = obj;
+
+  for (const part of parts) {
+    if (part === "") continue;
+    if (current === null || current === undefined) return undefined;
+    if (typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+
+  return current;
+}
+
+/**
+ * Check if a skill has test cases.
+ */
+export function hasTests(skill: Skill): boolean {
+  return skill.tests !== undefined && skill.tests.length > 0;
+}
+
+/**
+ * Get runnable test cases (excluding skipped).
+ */
+export function getRunnableTests(skill: Skill): SkillTestCase[] {
+  return (skill.tests ?? []).filter((t) => !t.skip);
 }

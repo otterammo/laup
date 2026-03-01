@@ -23,7 +23,9 @@ export {
   skillRenderers,
 } from "./skill-renderer.js";
 export type {
+  AccessContext,
   Skill,
+  SkillAccessControl,
   SkillDeprecation,
   SkillMetadata,
   SkillParameter,
@@ -31,12 +33,18 @@ export type {
   SkillToolOverride,
   SkillTrigger,
   SkillValidationResult,
+  SkillVisibility,
 } from "./skill-schema.js";
 export {
+  canAccessSkill,
+  canForkSkill,
+  canInstallSkill,
   getDeprecationNotice,
+  getSkillVisibility,
   isSkillDeprecated,
   parseSkill,
   renderSkillPrompt,
+  SkillAccessControlSchema,
   SkillDeprecationSchema,
   SkillMetadataSchema,
   SkillParameterSchema,
@@ -44,6 +52,7 @@ export {
   SkillSchema,
   SkillToolOverrideSchema,
   SkillTriggerSchema,
+  SkillVisibilitySchema,
   validateSkill,
 } from "./skill-schema.js";
 export type { SemanticVersion, VersionConstraint } from "./skill-version.js";

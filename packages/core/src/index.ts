@@ -42,6 +42,17 @@ export {
   InMemoryDbAdapter,
 } from "./db-adapter.js";
 export type {
+  Migration,
+  MigrationDryRunResult,
+  MigrationResult,
+  MigrationStatus,
+} from "./db-migrations.js";
+export {
+  computeChecksum,
+  createMigrator,
+  Migrator,
+} from "./db-migrations.js";
+export type {
   ContextField,
   ContextPacket,
   HandoffAck,

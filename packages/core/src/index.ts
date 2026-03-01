@@ -5,6 +5,36 @@ export type { ImportFormat, ImportResult } from "./import.js";
 export { detectFormat, importDocument, serializeCanonical } from "./import.js";
 export type { IncludeOptions, IncludeResult } from "./include.js";
 export { extractIncludePaths, hasIncludes, processIncludes } from "./include.js";
+export type {
+  McpAuditEntry,
+  McpAuditOperation,
+  McpCredentialRef,
+  McpHealthCheck,
+  McpHealthState,
+  McpHealthStatus,
+  McpScope,
+  McpServer,
+  McpTransport,
+  McpValidationResult,
+  McpVersionPin,
+  OrphanCheckResult,
+} from "./mcp-schema.js";
+export {
+  getServersAtScope,
+  isServerHealthy,
+  McpAuditEntrySchema,
+  McpAuditOperationSchema,
+  McpCredentialRefSchema,
+  McpHealthCheckSchema,
+  McpHealthStatusSchema,
+  McpScopeSchema,
+  McpServerSchema,
+  McpTransportSchema,
+  McpVersionPinSchema,
+  parseServerId,
+  resolveEffectiveServers,
+  validateMcpServer,
+} from "./mcp-schema.js";
 export type { FieldIssue } from "./parse.js";
 export { ParseError, parseCanonical, parseCanonicalString } from "./parse.js";
 export type { CanonicalInstruction, Frontmatter, ToolOverrides } from "./schema.js";

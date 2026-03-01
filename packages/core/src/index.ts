@@ -29,6 +29,31 @@ export {
   UsageEventSchema,
   UsageEventTypeSchema,
 } from "./cost-schema.js";
+export type {
+  ContextField,
+  ContextPacket,
+  HandoffAck,
+  HandoffHistoryEntry,
+  HandoffMode,
+  HandoffRouting,
+  HandoffStatus,
+  HandoffTemplate,
+  SecurityValidationResult,
+} from "./handoff-schema.js";
+export {
+  ContextFieldSchema,
+  ContextPacketSchema,
+  createPartialPacket,
+  estimateCompressedSize,
+  HandoffAckSchema,
+  HandoffHistoryEntrySchema,
+  HandoffModeSchema,
+  HandoffRoutingSchema,
+  HandoffStatusSchema,
+  HandoffTemplateSchema,
+  shouldCompressPacket,
+  validatePacketSecurity,
+} from "./handoff-schema.js";
 export type { HierarchyLoadResult, HierarchyOptions } from "./hierarchy.js";
 export { findRootInstruction, loadHierarchy } from "./hierarchy.js";
 export type { ImportFormat, ImportResult } from "./import.js";

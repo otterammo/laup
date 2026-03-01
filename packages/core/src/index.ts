@@ -141,6 +141,18 @@ export type { Scope, ScopedDocument } from "./scope.js";
 export { mergeScopes, SCOPE_PRECEDENCE, scopePrecedence } from "./scope.js";
 export type { ScopeConfig, ScopeLoadResult } from "./scope-loader.js";
 export { getDefaultScopePath, loadScopedDocument, loadScopes } from "./scope-loader.js";
+export type {
+  InstalledSkill,
+  SkillInstallStatus,
+  SkillQueryFilter,
+  SkillRegistry,
+  SkillUpdate,
+} from "./skill-registry.js";
+export {
+  createSkillRegistry,
+  InMemorySkillRegistry,
+  SqlSkillRegistry,
+} from "./skill-registry.js";
 export type { SkillRenderer } from "./skill-renderer.js";
 export {
   AiderSkillRenderer,

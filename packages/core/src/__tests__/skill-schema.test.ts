@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  detectCircularDependency,
+  getComposedSkillDependencies,
   getDeprecationNotice,
+  isComposedSkill,
   isNamespacedSkill,
   isSkillDeprecated,
   parseSkill,
   parseSkillName,
   qualifySkillName,
   renderSkillPrompt,
+  resolveStepParams,
   type Skill,
+  type SkillStep,
   skillBelongsToNamespace,
   skillNamesEqual,
   validateSkill,
@@ -347,6 +352,108 @@ prompt: Hello {{name}}
       expect(skillBelongsToNamespace("acme/skill", "acme")).toBe(true);
       expect(skillBelongsToNamespace("acme/skill", "other")).toBe(false);
       expect(skillBelongsToNamespace("skill", "acme")).toBe(false);
+    });
+  });
+
+  describe("skill composition (SKILL-008)", () => {
+    const composedSkill: Skill = {
+      ...validSkill,
+      steps: [
+        { skill: "acme/step-1", params: { input: "code" } },
+        { skill: "acme/step-2", args: { mode: "strict" }, as: "result" },
+      ],
+    };
+
+    it("isComposedSkill returns false for simple skill", () => {
+      expect(isComposedSkill(validSkill)).toBe(false);
+    });
+
+    it("isComposedSkill returns true for composed skill", () => {
+      expect(isComposedSkill(composedSkill)).toBe(true);
+    });
+
+    it("getComposedSkillDependencies returns empty for simple skill", () => {
+      expect(getComposedSkillDependencies(validSkill)).toEqual([]);
+    });
+
+    it("getComposedSkillDependencies returns step skills", () => {
+      const deps = getComposedSkillDependencies(composedSkill);
+      expect(deps).toEqual(["acme/step-1", "acme/step-2"]);
+    });
+
+    it("resolveStepParams maps parent params", () => {
+      const step: SkillStep = {
+        skill: "child",
+        params: { childInput: "parentInput" },
+      };
+      const result = resolveStepParams(step, { parentInput: "hello" });
+      expect(result).toEqual({ childInput: "hello" });
+    });
+
+    it("resolveStepParams includes literal args", () => {
+      const step: SkillStep = {
+        skill: "child",
+        args: { mode: "fast", count: 5 },
+      };
+      const result = resolveStepParams(step, {});
+      expect(result).toEqual({ mode: "fast", count: 5 });
+    });
+
+    it("resolveStepParams combines args and params", () => {
+      const step: SkillStep = {
+        skill: "child",
+        params: { input: "data" },
+        args: { mode: "strict" },
+      };
+      const result = resolveStepParams(step, { data: "test-data" });
+      expect(result).toEqual({ input: "test-data", mode: "strict" });
+    });
+
+    it("detectCircularDependency returns false for no deps", () => {
+      const getSkill = (name: string): Skill | undefined => {
+        if (name === "skill-a") return validSkill;
+        return undefined;
+      };
+      const result = detectCircularDependency("skill-a", getSkill);
+      expect(result.hasCircular).toBe(false);
+    });
+
+    it("detectCircularDependency detects self-reference", () => {
+      const selfRefSkill: Skill = {
+        ...validSkill,
+        name: "self-ref",
+        steps: [{ skill: "self-ref" }],
+      };
+      const getSkill = (name: string): Skill | undefined => {
+        if (name === "self-ref") return selfRefSkill;
+        return undefined;
+      };
+      const result = detectCircularDependency("self-ref", getSkill);
+      expect(result.hasCircular).toBe(true);
+      expect(result.cycle).toContain("self-ref");
+    });
+
+    it("detectCircularDependency detects indirect cycle", () => {
+      const skillA: Skill = { ...validSkill, name: "a", steps: [{ skill: "b" }] };
+      const skillB: Skill = { ...validSkill, name: "b", steps: [{ skill: "c" }] };
+      const skillC: Skill = { ...validSkill, name: "c", steps: [{ skill: "a" }] };
+      const skills: Record<string, Skill> = { a: skillA, b: skillB, c: skillC };
+      const getSkill = (name: string): Skill | undefined => skills[name];
+
+      const result = detectCircularDependency("a", getSkill);
+      expect(result.hasCircular).toBe(true);
+      expect(result.cycle).toEqual(["a", "b", "c", "a"]);
+    });
+
+    it("validates composed skill schema", () => {
+      const result = validateSkill({
+        ...validSkill,
+        steps: [
+          { skill: "acme/helper", params: { x: "y" }, args: { mode: "fast" }, as: "helper-result" },
+          { skill: "acme/final", when: "helper-result.success" },
+        ],
+      });
+      expect(result.valid).toBe(true);
     });
   });
 });

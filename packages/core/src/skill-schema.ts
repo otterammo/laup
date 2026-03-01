@@ -147,6 +147,28 @@ export const SkillToolOverrideSchema = z.record(z.string(), z.unknown());
 export type SkillToolOverride = z.infer<typeof SkillToolOverrideSchema>;
 
 /**
+ * A step in a composed skill (SKILL-008).
+ */
+export const SkillStepSchema = z.object({
+  /** Reference to skill ID (namespace/name format) */
+  skill: z.string(),
+
+  /** Parameter mappings: maps parent param names to child param names */
+  params: z.record(z.string(), z.string()).optional(),
+
+  /** Literal parameter values to pass */
+  args: z.record(z.string(), z.unknown()).optional(),
+
+  /** Optional step label for referencing output */
+  as: z.string().optional(),
+
+  /** Condition for running this step (expression evaluated at runtime) */
+  when: z.string().optional(),
+});
+
+export type SkillStep = z.infer<typeof SkillStepSchema>;
+
+/**
  * Portable skill definition.
  */
 export const SkillSchema = z.object({
@@ -194,6 +216,9 @@ export const SkillSchema = z.object({
 
   /** Deprecation information (SKILL-012) */
   deprecation: SkillDeprecationSchema.optional(),
+
+  /** Composed skill steps (SKILL-008) */
+  steps: z.array(SkillStepSchema).optional(),
 });
 
 export type Skill = z.infer<typeof SkillSchema>;
@@ -408,4 +433,108 @@ export function skillNamesEqual(a: string, b: string): boolean {
 export function skillBelongsToNamespace(skillName: string, namespace: string): boolean {
   const parsed = parseSkillName(skillName);
   return parsed.namespace?.toLowerCase() === namespace.toLowerCase();
+}
+
+/**
+ * Check if a skill is composed (has steps).
+ */
+export function isComposedSkill(skill: Skill): boolean {
+  return skill.steps !== undefined && skill.steps.length > 0;
+}
+
+/**
+ * Get all skill IDs referenced by a composed skill.
+ */
+export function getComposedSkillDependencies(skill: Skill): string[] {
+  if (!skill.steps) return [];
+  return skill.steps.map((step) => step.skill);
+}
+
+/**
+ * Result of circular dependency detection.
+ */
+export interface CircularDependencyResult {
+  hasCircular: boolean;
+  cycle?: string[];
+}
+
+/**
+ * Detect circular dependencies in composed skills.
+ * @param skillName The skill to check
+ * @param getSkill Function to retrieve a skill by name
+ * @param visited Set of already visited skill names (for recursion)
+ * @param path Current path of skill names (for cycle detection)
+ */
+export function detectCircularDependency(
+  skillName: string,
+  getSkill: (name: string) => Skill | undefined,
+  visited: Set<string> = new Set(),
+  path: string[] = [],
+): CircularDependencyResult {
+  // Normalize name for comparison
+  const normalizedName = skillName.toLowerCase();
+
+  // Check if we've already seen this skill in current path (cycle)
+  if (path.includes(normalizedName)) {
+    return {
+      hasCircular: true,
+      cycle: [...path, normalizedName],
+    };
+  }
+
+  // Skip if already fully visited
+  if (visited.has(normalizedName)) {
+    return { hasCircular: false };
+  }
+
+  // Get the skill
+  const skill = getSkill(skillName);
+  if (!skill) {
+    // Skill not found - can't have circular deps if it doesn't exist
+    return { hasCircular: false };
+  }
+
+  // Add to current path
+  const newPath = [...path, normalizedName];
+
+  // Check dependencies
+  const deps = getComposedSkillDependencies(skill);
+  for (const dep of deps) {
+    const result = detectCircularDependency(dep, getSkill, visited, newPath);
+    if (result.hasCircular) {
+      return result;
+    }
+  }
+
+  // Mark as fully visited
+  visited.add(normalizedName);
+  return { hasCircular: false };
+}
+
+/**
+ * Resolve parameter mappings for a composed skill step.
+ */
+export function resolveStepParams(
+  step: SkillStep,
+  parentParams: Record<string, unknown>,
+): Record<string, unknown> {
+  const resolved: Record<string, unknown> = {};
+
+  // Add literal args first
+  if (step.args) {
+    for (const [key, value] of Object.entries(step.args)) {
+      resolved[key] = value;
+    }
+  }
+
+  // Map parent params to child params
+  if (step.params) {
+    for (const [childParam, parentParam] of Object.entries(step.params)) {
+      if (parentParam in parentParams) {
+        resolved[childParam] = parentParams[parentParam];
+      }
+    }
+  }
+
+  return resolved;
 }

@@ -147,6 +147,19 @@ export { detectFormat, importDocument, serializeCanonical } from "./import.js";
 export type { IncludeOptions, IncludeResult } from "./include.js";
 export { extractIncludePaths, hasIncludes, processIncludes } from "./include.js";
 export type {
+  Job,
+  JobHandler,
+  JobPriority,
+  JobQueue,
+  JobQueueOptions,
+  JobQueueStats,
+  JobStatus,
+} from "./job-queue.js";
+export {
+  createJobQueue,
+  MemoryJobQueue,
+} from "./job-queue.js";
+export type {
   McpAuditEntry,
   McpAuditOperation,
   McpCredentialRef,

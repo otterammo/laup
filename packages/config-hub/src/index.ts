@@ -8,6 +8,15 @@ import { computeDiff, type DiffResult } from "./diff.js";
 export type { ValidationResult };
 export type { DiffLine, DiffResult } from "./diff.js";
 export { computeDiff, formatDiff } from "./diff.js";
+export type {
+  ConflictError,
+  UpdateRequest,
+  VersionedDocument,
+} from "./optimistic-locking.js";
+export {
+  VersionConflict,
+  VersionedDocumentStore,
+} from "./optimistic-locking.js";
 
 export interface SyncResult {
   tool: string;

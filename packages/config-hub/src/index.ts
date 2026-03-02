@@ -6,6 +6,8 @@ import { parseCanonical, validateCanonical } from "@laup/core";
 import { computeDiff, type DiffResult } from "./diff.js";
 
 export type { ValidationResult };
+export type { MergeChange, MergeResult } from "./auto-merge.js";
+export { autoMergeAdditive } from "./auto-merge.js";
 export type { DiffLine, DiffResult } from "./diff.js";
 export { computeDiff, formatDiff } from "./diff.js";
 

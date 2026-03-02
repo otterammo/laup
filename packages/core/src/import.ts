@@ -17,6 +17,7 @@ export interface ImportResult {
  */
 export type ImportFormat =
   | "claude-code"
+  | "codex"
   | "cursor"
   | "cursor-mdc"
   | "aider"
@@ -27,6 +28,7 @@ export type ImportFormat =
 
 const FORMAT_PATTERNS: Record<string, ImportFormat> = {
   "CLAUDE.md": "claude-code",
+  "AGENTS.md": "codex",
   ".cursorrules": "cursor",
   cursorrules: "cursor",
   ".windsurfrules": "windsurf",
@@ -58,6 +60,9 @@ export function detectFormat(filePath: string): ImportFormat | null {
   }
   if (name.toUpperCase() === "CLAUDE.MD" || name.toLowerCase().includes("claude.md")) {
     return "claude-code";
+  }
+  if (name.toUpperCase() === "AGENTS.MD" || name.toLowerCase().includes("agents.md")) {
+    return "codex";
   }
   if (name.toUpperCase() === "GEMINI.MD" || name.toLowerCase().includes("gemini.md")) {
     return "gemini";
@@ -100,6 +105,8 @@ export function importDocument(filePath: string, format?: ImportFormat): ImportR
   switch (detectedFormat) {
     case "claude-code":
       return importClaudeCode(content);
+    case "codex":
+      return importCodex(content);
     case "cursor":
       return importCursor(content);
     case "cursor-mdc":
@@ -161,6 +168,23 @@ function importClaudeCode(content: string): ImportResult {
     },
     warnings,
     sourceFormat: "claude-code",
+  };
+}
+
+/**
+ * Import from AGENTS.md (Codex) format.
+ */
+function importCodex(content: string): ImportResult {
+  const warnings: string[] = [];
+  const body = stripGeneratedHeader(content);
+
+  return {
+    document: {
+      frontmatter: defaultFrontmatter(),
+      body,
+    },
+    warnings,
+    sourceFormat: "codex",
   };
 }
 

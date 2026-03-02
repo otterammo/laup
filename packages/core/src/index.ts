@@ -66,6 +66,22 @@ export {
   TestEncryptionProvider,
 } from "./credential-store.js";
 export type {
+  ExportFormat,
+  ExportOptions,
+  ExportResult,
+  StreamingExporter,
+  UsageExportOptions,
+} from "./data-export.js";
+export {
+  aggregateUsageRecords,
+  createStreamingExporter,
+  exportData,
+  exportToCsv,
+  exportToJson,
+  exportToJsonl,
+  filterByDateRange,
+} from "./data-export.js";
+export type {
   DbAdapter,
   DbConnectionOptions,
   DbHealthStatus,

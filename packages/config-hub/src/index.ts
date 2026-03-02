@@ -8,6 +8,17 @@ import { computeDiff, type DiffResult } from "./diff.js";
 export type { ValidationResult };
 export type { DiffLine, DiffResult } from "./diff.js";
 export { computeDiff, formatDiff } from "./diff.js";
+export type {
+  DeliveryResult,
+  WebhookEvent,
+  WebhookEventType,
+  WebhookRegistration,
+  WebhookSender,
+} from "./webhooks.js";
+export {
+  WebhookDispatcher,
+  WebhookRegistry,
+} from "./webhooks.js";
 
 export interface SyncResult {
   tool: string;

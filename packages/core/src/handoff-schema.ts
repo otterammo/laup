@@ -358,21 +358,30 @@ function getNestedValue(obj: unknown, path: string): unknown {
 /**
  * Set nested value in object.
  */
+function isSafePathSegment(segment: string): boolean {
+  return segment !== "__proto__" && segment !== "prototype" && segment !== "constructor";
+}
+
 function setNestedValue(obj: Record<string, unknown>, path: string, value: unknown): void {
   const parts = path.split(".");
   let current: Record<string, unknown> = obj;
 
   for (let i = 0; i < parts.length - 1; i++) {
     const part = parts[i];
-    if (part === undefined) continue;
-    if (!(part in current)) {
+    if (part === undefined || !isSafePathSegment(part)) continue;
+
+    const existing = current[part];
+    if (existing === undefined) {
       current[part] = {};
+    } else if (existing === null || typeof existing !== "object" || Array.isArray(existing)) {
+      return;
     }
+
     current = current[part] as Record<string, unknown>;
   }
 
   const lastPart = parts[parts.length - 1];
-  if (lastPart) {
+  if (lastPart && isSafePathSegment(lastPart)) {
     current[lastPart] = value;
   }
 }

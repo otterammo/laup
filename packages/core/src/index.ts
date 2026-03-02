@@ -192,6 +192,26 @@ export {
 export type { FieldIssue } from "./parse.js";
 export { ParseError, parseCanonical, parseCanonicalString } from "./parse.js";
 export type {
+  Actor,
+  DefaultEffect,
+  EvaluationContext,
+  EvaluationReason,
+  EvaluationResult,
+  Policy,
+  PolicyCondition,
+  PolicyEffect,
+  PolicyEvaluatorConfig,
+  PolicyScope,
+  Resource,
+  ScopeChainEntry,
+} from "./policy/index.js";
+export {
+  createEvaluationContext,
+  createFailClosedEvaluator,
+  createFailOpenEvaluator,
+  PolicyEvaluator,
+} from "./policy/index.js";
+export type {
   AggregateFunction,
   AggregateSpec,
   BuiltQuery,

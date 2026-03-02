@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { WebhookEvent } from "../webhooks.js";
 import { WebhookDispatcher, WebhookRegistry } from "../webhooks.js";
 
 describe("WebhookRegistry", () => {
@@ -16,7 +17,7 @@ describe("WebhookDispatcher", () => {
     const registry = new WebhookRegistry();
     registry.register("project", "p1", "https://example.com/hook");
 
-    const sender = vi.fn(async () => {});
+    const sender = vi.fn(async (_endpoint: string, _payload: WebhookEvent) => {});
     const dispatcher = new WebhookDispatcher(registry, sender);
 
     await dispatcher.dispatch({
@@ -27,11 +28,14 @@ describe("WebhookDispatcher", () => {
     });
 
     expect(sender).toHaveBeenCalledTimes(1);
-    const [, payload] = sender.mock.calls[0] ?? [];
-    expect(payload.eventType).toBe("create");
-    expect(payload.documentId).toBe("doc-1");
-    expect(payload.actor).toBe("alice");
-    expect(payload.timestamp).toBeDefined();
+    const firstCall = sender.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    const payload = firstCall?.[1];
+    expect(payload).toBeDefined();
+    expect(payload?.eventType).toBe("create");
+    expect(payload?.documentId).toBe("doc-1");
+    expect(payload?.actor).toBe("alice");
+    expect(payload?.timestamp).toBeDefined();
   });
 
   it("retries failed deliveries with exponential backoff", async () => {
@@ -39,7 +43,7 @@ describe("WebhookDispatcher", () => {
     registry.register("project", "p1", "https://example.com/hook");
 
     let attempts = 0;
-    const sender = vi.fn(async () => {
+    const sender = vi.fn(async (_endpoint: string, _payload: WebhookEvent) => {
       attempts++;
       if (attempts < 3) throw new Error("temporary fail");
     });

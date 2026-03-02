@@ -12,6 +12,9 @@ const globToRegex = (glob: string): RegExp => {
   let out = "^";
   for (let i = 0; i < glob.length; i += 1) {
     const ch = glob[i];
+    if (!ch) {
+      continue;
+    }
     const next = glob[i + 1];
     if (ch === "*" && next === "*") {
       out += ".*";

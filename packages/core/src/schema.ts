@@ -32,6 +32,20 @@ const GeminiOverrideSchema = z.object({
 const OpenCodeOverrideSchema = z.object({
   model: z.string().optional(),
   provider: z.string().optional(),
+  maxTokens: z.number().optional(),
+  autoCompact: z.boolean().optional(),
+  mcpServers: z
+    .record(
+      z.string(),
+      z.object({
+        type: z.enum(["stdio", "http", "sse"]),
+        command: z.string().optional(),
+        url: z.string().optional(),
+        args: z.array(z.string()).optional(),
+        env: z.record(z.string(), z.string()).optional(),
+      }),
+    )
+    .optional(),
 });
 
 const WindsurfOverrideSchema = z.object({
@@ -49,10 +63,13 @@ const DevinOverrideSchema = z.object({
 
 const CopilotOverrideSchema = z.object({});
 
+const CodexOverrideSchema = z.object({});
+
 // looseObject preserves unknown tool IDs at runtime so validate.ts can
 // detect and report them (ADR-001 §7.6, step 5 — unknown ID is a warning, not error)
 export const ToolOverridesSchema = z.looseObject({
   "claude-code": ClaudeCodeOverrideSchema.optional(),
+  codex: CodexOverrideSchema.optional(),
   copilot: CopilotOverrideSchema.optional(),
   gemini: GeminiOverrideSchema.optional(),
   opencode: OpenCodeOverrideSchema.optional(),

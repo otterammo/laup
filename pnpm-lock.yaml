@@ -68,7 +68,46 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@25.3.2)(yaml@2.8.2)
 
+  packages/adapters/codex:
+    dependencies:
+      '@laup/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      typescript:
+        specifier: '*'
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@types/node@25.3.2)(yaml@2.8.2)
+
+  packages/adapters/copilot:
+    dependencies:
+      '@laup/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      typescript:
+        specifier: '*'
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@types/node@25.3.2)(yaml@2.8.2)
+
   packages/adapters/cursor:
+    dependencies:
+      '@laup/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      typescript:
+        specifier: '*'
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@types/node@25.3.2)(yaml@2.8.2)
+
+  packages/adapters/opencode:
     dependencies:
       '@laup/core':
         specifier: workspace:*

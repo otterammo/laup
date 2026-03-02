@@ -1,0 +1,10 @@
+{
+  "_generated": "laup:generated — do not edit directly, edit laup.md instead",
+  "agents": {
+    "coder": {
+      "model": "claude-3.7-sonnet",
+      "maxTokens": 5000
+    }
+  },
+  "autoCompact": true
+}

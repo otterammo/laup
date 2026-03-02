@@ -12,10 +12,10 @@ import {
 describe("PolicyEvaluator", () => {
   // Helper to create a basic scope chain
   const createScopeChain = (overrides: Partial<Record<string, string>> = {}): ScopeChainEntry[] => [
-    { scope: "user", id: overrides.user ?? "user-1" },
-    { scope: "project", id: overrides.project ?? "proj-1" },
-    { scope: "team", id: overrides.team ?? "team-1" },
-    { scope: "org", id: overrides.org ?? "org-1" },
+    { scope: "user", id: overrides["user"] ?? "user-1" },
+    { scope: "project", id: overrides["project"] ?? "proj-1" },
+    { scope: "team", id: overrides["team"] ?? "team-1" },
+    { scope: "org", id: overrides["org"] ?? "org-1" },
   ];
 
   // Helper to create a basic context

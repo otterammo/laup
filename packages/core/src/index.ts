@@ -167,6 +167,24 @@ export {
 } from "./mcp-schema.js";
 export type { FieldIssue } from "./parse.js";
 export { ParseError, parseCanonical, parseCanonicalString } from "./parse.js";
+export type {
+  AggregateFunction,
+  AggregateSpec,
+  BuiltQuery,
+  ComparisonOp,
+  FilterCondition,
+  PaginatedQueryResult,
+  PaginationSpec,
+  QueryBuilder,
+  SortDirection,
+  SortSpec,
+  TimeBucketSpec,
+} from "./query-builder.js";
+export {
+  createQueryBuilder,
+  query,
+  SqlQueryBuilder,
+} from "./query-builder.js";
 export type { CanonicalInstruction, Frontmatter, ToolOverrides } from "./schema.js";
 export { CanonicalInstructionSchema, FrontmatterSchema, ToolOverridesSchema } from "./schema.js";
 export type { Scope, ScopedDocument } from "./scope.js";

@@ -6,8 +6,19 @@ import { parseCanonical, validateCanonical } from "@laup/core";
 import { computeDiff, type DiffResult } from "./diff.js";
 
 export type { ValidationResult };
+export type { AuditQuery, DocumentAuditRecord, DocumentChangeAction } from "./audit-history.js";
+export { DocumentAuditHistory } from "./audit-history.js";
 export type { DiffLine, DiffResult } from "./diff.js";
 export { computeDiff, formatDiff } from "./diff.js";
+export type {
+  ConflictError,
+  UpdateRequest,
+  VersionedDocument,
+} from "./optimistic-locking.js";
+export {
+  VersionConflict,
+  VersionedDocumentStore,
+} from "./optimistic-locking.js";
 export type {
   DeliveryResult,
   WebhookEvent,

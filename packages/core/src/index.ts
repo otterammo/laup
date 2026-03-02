@@ -20,6 +20,17 @@ export {
   SqlAuditStorage,
 } from "./audit-storage.js";
 export type {
+  Cache,
+  CacheOptions,
+  CacheStats,
+} from "./cache.js";
+export {
+  cached,
+  createCache,
+  MemoryCache,
+  TieredCache,
+} from "./cache.js";
+export type {
   BudgetAlert,
   CostCap,
   CostSummary,

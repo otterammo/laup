@@ -23,6 +23,10 @@ export interface SkillRenderer {
   getFilename(skill: Skill): string;
 }
 
+function escapeYamlDoubleQuoted(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "").replace(/\n/g, "\\n");
+}
+
 /**
  * Claude Code skill renderer.
  * Renders skills as markdown with slash command documentation.
@@ -122,7 +126,7 @@ export class CursorSkillRenderer implements SkillRenderer {
 
     // YAML frontmatter
     lines.push("---");
-    lines.push(`description: "${skill.description.replace(/"/g, '\\"')}"`);
+    lines.push(`description: "${escapeYamlDoubleQuoted(skill.description)}"`);
     if (skill.tools?.["cursor"]) {
       const cursorOverrides = skill.tools["cursor"] as Record<string, unknown>;
       if (cursorOverrides["globs"]) {

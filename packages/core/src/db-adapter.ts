@@ -237,9 +237,15 @@ export class InMemoryDbAdapter extends BaseDbAdapter {
         // Simple parameter substitution
         const row: Record<string, unknown> = { id };
         if (params) {
-          const colMatch = sql.match(/\(([^)]+)\)\s+values/i);
-          if (colMatch && colMatch[1]) {
-            const cols = colMatch[1].split(",").map((c) => c.trim());
+          const lowerSql = sql.toLowerCase();
+          const valuesIdx = lowerSql.indexOf("values");
+          const openParenIdx = valuesIdx > 0 ? sql.lastIndexOf("(", valuesIdx) : -1;
+          const closeParenIdx =
+            valuesIdx > 0 && openParenIdx >= 0 ? sql.indexOf(")", openParenIdx + 1) : -1;
+
+          if (openParenIdx >= 0 && closeParenIdx > openParenIdx) {
+            const colsRaw = sql.slice(openParenIdx + 1, closeParenIdx);
+            const cols = colsRaw.split(",").map((c) => c.trim());
             cols.forEach((col, i) => {
               if (params[i] !== undefined) {
                 row[col] = params[i];

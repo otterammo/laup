@@ -20,6 +20,29 @@ export {
   SqlAuditStorage,
 } from "./audit-storage.js";
 export type {
+  ApiKeyAuthOptions,
+  AuthContext,
+  AuthFailure,
+  AuthIdentity,
+  AuthMethod,
+  AuthMiddlewareOptions,
+  AuthResult,
+  AuthSuccess,
+  OauthAuthOptions,
+  OidcClaims,
+  RequestLike,
+  SamlAssertion,
+  SamlAuthOptions,
+} from "./auth/index.js";
+export {
+  AuthIdentitySchema,
+  AuthMethodSchema,
+  authenticateApiKey,
+  authenticateOauth,
+  authenticateRequest,
+  authenticateSaml,
+} from "./auth/index.js";
+export type {
   Cache,
   CacheOptions,
   CacheStats,
@@ -193,6 +216,11 @@ export type { FieldIssue } from "./parse.js";
 export { ParseError, parseCanonical, parseCanonicalString } from "./parse.js";
 export type {
   Actor,
+  CanonicalPolicyCondition,
+  CanonicalPolicyDocument,
+  CanonicalPolicyEffect,
+  CanonicalPolicyRule,
+  CanonicalPolicyScope,
   DefaultEffect,
   EvaluationContext,
   EvaluationReason,
@@ -209,7 +237,9 @@ export type {
   PolicyCondition,
   PolicyEffect,
   PolicyEvaluatorConfig,
+  PolicyMatchContext,
   PolicyScope,
+  PolicyValidationResult,
   Resource,
   ScopeChainEntry,
 } from "./policy/index.js";
@@ -220,11 +250,21 @@ export {
   createPermissionAuditLogger,
   evaluatePolicyWithAudit,
   MatchedRuleSchema,
+  matchesGlob,
+  matchesRule,
   PermissionAuditEntrySchema,
   PermissionAuditLogger,
   PermissionResultSchema,
+  PolicyConditionSchema,
+  PolicyDocumentSchema,
+  PolicyEffectSchema,
   PolicyEvaluator,
+  PolicyRuleSchema,
+  PolicyScopeSchema,
   permissionEvaluation,
+  validatePolicyDocument,
+  validatePolicyJson,
+  validatePolicyYaml,
 } from "./policy/index.js";
 export type {
   AggregateFunction,

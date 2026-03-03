@@ -113,6 +113,13 @@ export {
   PolicyRuleSchema,
   PolicyScopeSchema,
 } from "./policy-schema.js";
+export type {
+  PolicySimulationRecord,
+  PolicySimulationRequest,
+  PolicySimulationResult,
+  PolicySimulationSummary,
+} from "./policy-simulation.js";
+export { createPolicySimulationService, PolicySimulationService } from "./policy-simulation.js";
 export type { ValidationResult as PolicyValidationResult } from "./policy-validator.js";
 export {
   validatePolicyDocument,

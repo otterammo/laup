@@ -625,6 +625,140 @@ describe("PolicyEvaluator", () => {
     });
   });
 
+  describe("PERM-007 conditional dimensions", () => {
+    it("supports role dimension", () => {
+      const evaluator = new PolicyEvaluator();
+      const context = createContext("write");
+      context.actor.attributes = { roles: ["editor", "viewer"] };
+
+      const result = evaluator.evaluate(context, [
+        createPolicy({
+          id: "editor-write",
+          conditions: [{ field: "roles", operator: "contains", value: "editor" }],
+        }),
+      ]);
+
+      expect(result.allowed).toBe(true);
+      expect(result.reason.matchedPolicyId).toBe("editor-write");
+    });
+
+    it("supports project dimension", () => {
+      const evaluator = new PolicyEvaluator();
+      const context = createContext("read");
+      context.environment = { project: "payments" };
+
+      const result = evaluator.evaluate(context, [
+        createPolicy({
+          id: "project-payments",
+          conditions: [{ field: "project", operator: "eq", value: "payments" }],
+        }),
+      ]);
+
+      expect(result.allowed).toBe(true);
+      expect(result.reason.matchedPolicyId).toBe("project-payments");
+    });
+
+    it("supports branch dimension", () => {
+      const evaluator = new PolicyEvaluator();
+      const context = createContext("read");
+      context.environment = { branch: "feature/perm-007" };
+
+      const result = evaluator.evaluate(context, [
+        createPolicy({
+          id: "feature-branches",
+          conditions: [{ field: "branch", operator: "regex", value: "^feature/" }],
+        }),
+      ]);
+
+      expect(result.allowed).toBe(true);
+      expect(result.reason.matchedPolicyId).toBe("feature-branches");
+    });
+
+    it("supports tool dimension", () => {
+      const evaluator = new PolicyEvaluator();
+      const context = createContext("execute", "tool-call");
+      context.environment = { tool: "exec" };
+
+      const result = evaluator.evaluate(context, [
+        createPolicy({
+          id: "allow-exec",
+          conditions: [{ field: "tool", operator: "eq", value: "exec" }],
+        }),
+      ]);
+
+      expect(result.allowed).toBe(true);
+      expect(result.reason.matchedPolicyId).toBe("allow-exec");
+    });
+
+    it("supports day + time window dimensions", () => {
+      const evaluator = new PolicyEvaluator();
+      const context = createContext("write");
+      context.environment = {
+        timestamp: "2026-03-02T15:30:00Z", // Monday 15:30 UTC
+      };
+
+      const result = evaluator.evaluate(context, [
+        createPolicy({
+          id: "business-hours",
+          conditions: [
+            { field: "day", operator: "in", value: ["mon", "tue", "wed", "thu", "fri"] },
+            { field: "timeWindow", operator: "eq", value: "09:00-17:00" },
+          ],
+        }),
+      ]);
+
+      expect(result.allowed).toBe(true);
+      expect(result.reason.matchedPolicyId).toBe("business-hours");
+    });
+
+    it("supports combined dimensions and preserves deny precedence", () => {
+      const evaluator = new PolicyEvaluator();
+      const context = createContext("execute", "tool-call");
+      context.actor.attributes = { roles: ["editor"] };
+      context.environment = {
+        project: "payments",
+        branch: "main",
+        tool: "exec",
+        timestamp: "2026-03-02T20:15:00Z", // Monday, outside 09:00-17:00
+      };
+
+      const result = evaluator.evaluate(context, [
+        createPolicy({
+          id: "project-allow",
+          effect: "allow",
+          scope: "project",
+          scopeId: "proj-1",
+          actions: ["execute"],
+          resourceTypes: ["tool-call"],
+          conditions: [
+            { field: "roles", operator: "contains", value: "editor" },
+            { field: "project", operator: "eq", value: "payments" },
+            { field: "branch", operator: "eq", value: "main" },
+            { field: "tool", operator: "eq", value: "exec" },
+          ],
+        }),
+        createPolicy({
+          id: "org-deny-after-hours",
+          effect: "deny",
+          scope: "org",
+          scopeId: "org-1",
+          actions: ["execute"],
+          resourceTypes: ["tool-call"],
+          conditions: [
+            { field: "day", operator: "in", value: ["mon", "tue", "wed", "thu", "fri"] },
+            { field: "timeWindow", operator: "eq", value: "17:01-08:59" },
+          ],
+        }),
+      ]);
+
+      expect(result.allowed).toBe(false);
+      expect(result.effect).toBe("deny");
+      expect(result.reason.matchedPolicyId).toBe("org-deny-after-hours");
+      expect(result.reason.denyCount).toBe(1);
+      expect(result.reason.allowCount).toBe(1);
+    });
+  });
+
   describe("evaluation consistency and determinism", () => {
     it("produces same result for same input", () => {
       const evaluator = new PolicyEvaluator();

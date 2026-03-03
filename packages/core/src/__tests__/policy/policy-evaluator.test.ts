@@ -759,6 +759,142 @@ describe("PolicyEvaluator", () => {
     });
   });
 
+  describe("PERM-010 inheritance + override semantics", () => {
+    it("inherits higher-scope policies by default", () => {
+      const evaluator = new PolicyEvaluator();
+      const context = createContext("read");
+
+      const result = evaluator.evaluate(context, [
+        createPolicy({
+          id: "org-allow-read",
+          effect: "allow",
+          scope: "org",
+          scopeId: "org-1",
+          actions: ["read"],
+        }),
+      ]);
+
+      expect(result.allowed).toBe(true);
+      expect(result.reason.matchedPolicyId).toBe("org-allow-read");
+    });
+
+    it("does not inherit policy when inherit=false and scope is not active scope", () => {
+      const evaluator = new PolicyEvaluator({ defaultEffect: "deny" });
+      const context = createContext("read");
+
+      const result = evaluator.evaluate(context, [
+        createPolicy({
+          id: "org-local-only",
+          effect: "allow",
+          scope: "org",
+          scopeId: "org-1",
+          actions: ["read"],
+          inherit: false,
+        }),
+      ]);
+
+      expect(result.allowed).toBe(false);
+      expect(result.reason.usedDefault).toBe(true);
+      expect(result.reason.allMatchedPolicyIds).toEqual([]);
+    });
+
+    it("allows lower-scope explicit override to cut off inherited higher scopes", () => {
+      const evaluator = new PolicyEvaluator({ defaultEffect: "deny" });
+      const context = createContext("delete");
+
+      const result = evaluator.evaluate(context, [
+        createPolicy({
+          id: "org-deny-delete",
+          effect: "deny",
+          scope: "org",
+          scopeId: "org-1",
+          actions: ["delete"],
+        }),
+        createPolicy({
+          id: "project-override-allow-delete",
+          effect: "allow",
+          scope: "project",
+          scopeId: "proj-1",
+          actions: ["delete"],
+          override: true,
+        }),
+      ]);
+
+      expect(result.allowed).toBe(true);
+      expect(result.reason.matchedPolicyId).toBe("project-override-allow-delete");
+      expect(result.reason.allMatchedPolicyIds).toEqual(["project-override-allow-delete"]);
+    });
+
+    it("preserves deny-over-allow precedence after override resolution", () => {
+      const evaluator = new PolicyEvaluator({ defaultEffect: "deny" });
+      const context = createContext("execute", "tool-call");
+
+      const result = evaluator.evaluate(context, [
+        createPolicy({
+          id: "org-deny-exec",
+          effect: "deny",
+          scope: "org",
+          scopeId: "org-1",
+          actions: ["execute"],
+          resourceTypes: ["tool-call"],
+        }),
+        createPolicy({
+          id: "project-override-allow-exec",
+          effect: "allow",
+          scope: "project",
+          scopeId: "proj-1",
+          actions: ["execute"],
+          resourceTypes: ["tool-call"],
+          override: true,
+        }),
+        createPolicy({
+          id: "project-deny-exec",
+          effect: "deny",
+          scope: "project",
+          scopeId: "proj-1",
+          actions: ["execute"],
+          resourceTypes: ["tool-call"],
+        }),
+      ]);
+
+      expect(result.allowed).toBe(false);
+      expect(result.effect).toBe("deny");
+      expect(result.reason.matchedPolicyId).toBe("project-deny-exec");
+      expect(result.reason.denyCount).toBe(1);
+      expect(result.reason.allowCount).toBe(1);
+    });
+
+    it("resolves same-scope/same-priority ties deterministically by policy id", () => {
+      const evaluator = new PolicyEvaluator();
+      const context = createContext("read");
+
+      const policies: Policy[] = [
+        createPolicy({
+          id: "z-policy",
+          effect: "allow",
+          scope: "org",
+          scopeId: "org-1",
+          actions: ["read"],
+          priority: 0,
+        }),
+        createPolicy({
+          id: "a-policy",
+          effect: "allow",
+          scope: "org",
+          scopeId: "org-1",
+          actions: ["read"],
+          priority: 0,
+        }),
+      ];
+
+      const result1 = evaluator.evaluate(context, policies);
+      const result2 = evaluator.evaluate(context, [...policies].reverse());
+
+      expect(result1.reason.matchedPolicyId).toBe("a-policy");
+      expect(result2.reason.matchedPolicyId).toBe("a-policy");
+    });
+  });
+
   describe("evaluation consistency and determinism", () => {
     it("produces same result for same input", () => {
       const evaluator = new PolicyEvaluator();

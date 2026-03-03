@@ -310,6 +310,7 @@ export {
   permissionEvaluation,
   resolveBuiltInRoles,
   resolveIdentityRoles,
+  resolveInheritedPolicies,
   validatePolicyDocument,
   validatePolicyJson,
   validatePolicyYaml,

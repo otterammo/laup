@@ -14,7 +14,13 @@
  *    - Higher scopes take precedence over lower scopes
  *    - An org-level deny overrides a project-level allow
  *
- * 3. **Default Behavior**: Configurable per organization
+ * 3. **Inheritance/Override** (PERM-010)
+ *    - Policies are inherited down the scope chain by default
+ *    - `inherit: false` restricts a policy to its own scope context only
+ *    - `override: true` at a lower scope cuts off inherited higher-scope
+ *      policies for the current evaluation context
+ *
+ * 4. **Default Behavior**: Configurable per organization
  *    - fail-closed (deny): Default for new organizations
  *    - fail-open (allow): Must be explicitly configured
  *
@@ -59,6 +65,17 @@ export interface Policy {
   conditions?: PolicyCondition[];
   priority?: number;
   enabled?: boolean;
+  /**
+   * Whether this policy should be inherited by lower scopes.
+   * Defaults to true.
+   */
+  inherit?: boolean;
+  /**
+   * Whether this policy explicitly overrides inherited policies from
+   * higher scopes for the current evaluation context.
+   * Defaults to false.
+   */
+  override?: boolean;
   /** Marks an allowed action as requiring human approval before execution. */
   requiresApproval?: boolean;
   /** High-risk actions are treated as approval-gated by approval integrations. */
@@ -94,6 +111,42 @@ function getScopePriority(scope: PolicyScope): number {
   return index === -1 ? -1 : index;
 }
 
+/**
+ * Resolve the effective matching policy set after applying inheritance
+ * and explicit override behavior.
+ */
+export function resolveInheritedPolicies(
+  context: EvaluationContext,
+  matchingPolicies: Policy[],
+): Policy[] {
+  const activeScope = context.scopeChain[0];
+
+  const inheritablePolicies = matchingPolicies.filter((policy) => {
+    if (policy.inherit !== false) {
+      return true;
+    }
+
+    if (!activeScope) {
+      return false;
+    }
+
+    return policy.scope === activeScope.scope && policy.scopeId === activeScope.id;
+  });
+
+  const overridePolicies = inheritablePolicies.filter((policy) => policy.override === true);
+  if (overridePolicies.length === 0) {
+    return inheritablePolicies;
+  }
+
+  const strongestOverridePriority = Math.min(
+    ...overridePolicies.map((policy) => getScopePriority(policy.scope)),
+  );
+
+  return inheritablePolicies.filter(
+    (policy) => getScopePriority(policy.scope) <= strongestOverridePriority,
+  );
+}
+
 export class PolicyEvaluator {
   private readonly config: PolicyEvaluatorConfig;
 
@@ -110,12 +163,13 @@ export class PolicyEvaluator {
   evaluate(context: EvaluationContext, policies: Policy[]): EvaluationResult {
     const enabledPolicies = policies.filter((p) => p.enabled !== false);
     const matchingPolicies = enabledPolicies.filter((p) => this.policyMatches(p, context));
+    const resolvedPolicies = resolveInheritedPolicies(context, matchingPolicies);
 
-    if (matchingPolicies.length === 0) {
+    if (resolvedPolicies.length === 0) {
       return this.createDefaultResult();
     }
 
-    const sortedPolicies = this.sortPolicies(matchingPolicies);
+    const sortedPolicies = this.sortPolicies(resolvedPolicies);
     const allMatchedPolicyIds = sortedPolicies.map((p) => p.id);
     const denyPolicies = sortedPolicies.filter((p) => p.effect === "deny");
     const allowPolicies = sortedPolicies.filter((p) => p.effect === "allow");
@@ -210,7 +264,11 @@ export class PolicyEvaluator {
 
       const aPriority = a.priority ?? 0;
       const bPriority = b.priority ?? 0;
-      return bPriority - aPriority;
+      if (bPriority !== aPriority) {
+        return bPriority - aPriority;
+      }
+
+      return a.id.localeCompare(b.id);
     });
   }
 

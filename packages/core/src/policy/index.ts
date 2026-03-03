@@ -93,6 +93,7 @@ export {
   createFailClosedEvaluator,
   createFailOpenEvaluator,
   PolicyEvaluator,
+  resolveInheritedPolicies,
 } from "./policy-evaluator.js";
 export type { PolicyMatchContext } from "./policy-matcher.js";
 export { matchesGlob, matchesRule } from "./policy-matcher.js";

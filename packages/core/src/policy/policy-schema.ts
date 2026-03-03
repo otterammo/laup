@@ -42,6 +42,8 @@ export const PolicyRuleSchema = z.object({
   scopeId: z.string().min(1),
   conditions: z.array(PolicyConditionSchema).default([]),
   description: z.string().optional(),
+  inherit: z.boolean().optional(),
+  override: z.boolean().optional(),
   requiresApproval: z.boolean().optional(),
   riskLevel: PolicyRiskLevelSchema.optional(),
   approvalTtlMs: z.number().int().positive().optional(),

@@ -67,3 +67,12 @@ export {
   validatePolicyJson,
   validatePolicyYaml,
 } from "./policy-validator.js";
+export type { BuiltInRole, RolePolicyOptions } from "./rbac.js";
+export {
+  BUILT_IN_ROLES,
+  BuiltInRoleSchema,
+  createIdentityRolePolicies,
+  createRolePolicies,
+  resolveBuiltInRoles,
+  resolveIdentityRoles,
+} from "./rbac.js";

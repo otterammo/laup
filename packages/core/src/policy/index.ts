@@ -82,3 +82,26 @@ export {
   createFailOpenEvaluator,
   PolicyEvaluator,
 } from "./policy-evaluator.js";
+export type { PolicyMatchContext } from "./policy-matcher.js";
+export { matchesGlob, matchesRule } from "./policy-matcher.js";
+export type {
+  PolicyCondition as CanonicalPolicyCondition,
+  PolicyDocument as CanonicalPolicyDocument,
+  PolicyEffect as CanonicalPolicyEffect,
+  PolicyRule as CanonicalPolicyRule,
+  PolicyScope as CanonicalPolicyScope,
+} from "./policy-schema.js";
+export {
+  PolicyConditionSchema,
+  PolicyDocumentSchema,
+  PolicyEffectSchema,
+  PolicyRuleSchema,
+  PolicyScopeSchema,
+} from "./policy-schema.js";
+
+export type { ValidationResult as PolicyValidationResult } from "./policy-validator.js";
+export {
+  validatePolicyDocument,
+  validatePolicyJson,
+  validatePolicyYaml,
+} from "./policy-validator.js";

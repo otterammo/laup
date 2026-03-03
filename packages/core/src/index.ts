@@ -193,6 +193,11 @@ export type { FieldIssue } from "./parse.js";
 export { ParseError, parseCanonical, parseCanonicalString } from "./parse.js";
 export type {
   Actor,
+  CanonicalPolicyCondition,
+  CanonicalPolicyDocument,
+  CanonicalPolicyEffect,
+  CanonicalPolicyRule,
+  CanonicalPolicyScope,
   DefaultEffect,
   EvaluationContext,
   EvaluationReason,
@@ -201,7 +206,9 @@ export type {
   PolicyCondition,
   PolicyEffect,
   PolicyEvaluatorConfig,
+  PolicyMatchContext,
   PolicyScope,
+  PolicyValidationResult,
   Resource,
   ScopeChainEntry,
 } from "./policy/index.js";
@@ -209,7 +216,17 @@ export {
   createEvaluationContext,
   createFailClosedEvaluator,
   createFailOpenEvaluator,
+  matchesGlob,
+  matchesRule,
+  PolicyConditionSchema,
+  PolicyDocumentSchema,
+  PolicyEffectSchema,
   PolicyEvaluator,
+  PolicyRuleSchema,
+  PolicyScopeSchema,
+  validatePolicyDocument,
+  validatePolicyJson,
+  validatePolicyYaml,
 } from "./policy/index.js";
 export type {
   AggregateFunction,

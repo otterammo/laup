@@ -3,6 +3,23 @@
  */
 
 export type {
+  ActionHookContext,
+  ActionHookDefinition,
+  ActionHookPhase,
+  ExecuteActionWithHooksOptions,
+  HookAllowResult,
+  HookVetoResult,
+  PostActionHook,
+  PostActionHookContext,
+  PreActionHook,
+  PreActionHookResult,
+} from "./action-hooks.js";
+export {
+  ActionHookExecutionError,
+  executeActionWithHooks,
+  PreActionVetoError,
+} from "./action-hooks.js";
+export type {
   ApprovalDecisionStatus,
   ApprovalEnforcementStatus,
   ApprovalGateConfig,

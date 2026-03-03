@@ -215,6 +215,9 @@ export {
 export type { FieldIssue } from "./parse.js";
 export { ParseError, parseCanonical, parseCanonicalString } from "./parse.js";
 export type {
+  ActionHookContext,
+  ActionHookDefinition,
+  ActionHookPhase,
   Actor,
   ApprovalDecisionStatus,
   ApprovalEnforcementStatus,
@@ -238,6 +241,9 @@ export type {
   EvaluationContext,
   EvaluationReason,
   EvaluationResult,
+  ExecuteActionWithHooksOptions,
+  HookAllowResult,
+  HookVetoResult,
   KillSwitchActivationInput,
   KillSwitchDeactivationInput,
   KillSwitchEnforcementInput,
@@ -259,11 +265,16 @@ export type {
   PolicyRiskLevel,
   PolicyScope,
   PolicyValidationResult,
+  PostActionHook,
+  PostActionHookContext,
+  PreActionHook,
+  PreActionHookResult,
   Resource,
   RolePolicyOptions,
   ScopeChainEntry,
 } from "./policy/index.js";
 export {
+  ActionHookExecutionError,
   ApprovalGateService,
   BUILT_IN_ROLES,
   BuiltInRoleSchema,
@@ -280,6 +291,7 @@ export {
   EmergencyKillSwitch,
   evaluatePolicyWithApprovalGate,
   evaluatePolicyWithAudit,
+  executeActionWithHooks,
   KillSwitchBlockedError,
   MatchedRuleSchema,
   matchesGlob,
@@ -294,6 +306,7 @@ export {
   PolicyRiskLevelSchema,
   PolicyRuleSchema,
   PolicyScopeSchema,
+  PreActionVetoError,
   permissionEvaluation,
   resolveBuiltInRoles,
   resolveIdentityRoles,

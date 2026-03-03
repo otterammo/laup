@@ -126,6 +126,21 @@ export {
   validatePolicyJson,
   validatePolicyYaml,
 } from "./policy-validator.js";
+export type {
+  RateLimitCheck,
+  RateLimitContext,
+  RateLimitDecision,
+  RateLimitDimension,
+  RateLimiterConfig,
+  RateLimitRule,
+} from "./rate-limiter.js";
+export {
+  createRateLimitContext,
+  createRateLimiter,
+  enforceRateLimit,
+  RateLimitExceededError,
+  RateLimiter,
+} from "./rate-limiter.js";
 export type { BuiltInRole, RolePolicyOptions } from "./rbac.js";
 export {
   BUILT_IN_ROLES,

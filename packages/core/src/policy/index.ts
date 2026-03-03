@@ -150,3 +150,18 @@ export {
   resolveBuiltInRoles,
   resolveIdentityRoles,
 } from "./rbac.js";
+export type {
+  GuardPatternType,
+  GuardRuleEffect,
+  GuardTargetType,
+  ResourceGuardCheck,
+  ResourceGuardConfig,
+  ResourceGuardDecision,
+  ResourceGuardRule,
+} from "./resource-guard.js";
+export {
+  createResourceGuard,
+  enforceResourceAccess,
+  ResourceAccessBlockedError,
+  ResourceGuard,
+} from "./resource-guard.js";

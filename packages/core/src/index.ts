@@ -222,6 +222,7 @@ export type {
   CanonicalPolicyEffect,
   CanonicalPolicyRule,
   CanonicalPolicyScope,
+  ConditionalDimensions,
   DefaultEffect,
   EmergencyKillSwitchConfig,
   EvaluationContext,
@@ -254,6 +255,7 @@ export type {
 export {
   BUILT_IN_ROLES,
   BuiltInRoleSchema,
+  conditionsMatch,
   createEmergencyKillSwitch,
   createEvaluationContext,
   createFailClosedEvaluator,
@@ -261,6 +263,7 @@ export {
   createIdentityRolePolicies,
   createPermissionAuditLogger,
   createRolePolicies,
+  deriveConditionalDimensions,
   EmergencyKillSwitch,
   evaluatePolicyWithAudit,
   KillSwitchBlockedError,

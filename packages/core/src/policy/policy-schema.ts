@@ -8,7 +8,19 @@ export type PolicyScope = z.infer<typeof PolicyScopeSchema>;
 
 export const PolicyConditionSchema = z.object({
   field: z.string().min(1),
-  operator: z.enum(["eq", "neq", "in", "nin", "contains", "regex", "gt", "gte", "lt", "lte"]),
+  operator: z.enum([
+    "eq",
+    "neq",
+    "in",
+    "nin",
+    "contains",
+    "exists",
+    "regex",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+  ]),
   value: z.union([
     z.string(),
     z.number(),

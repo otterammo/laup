@@ -64,6 +64,8 @@ const evaluateCondition = (
         : typeof fieldValue === "string" && typeof expected === "string"
           ? fieldValue.includes(expected)
           : false;
+    case "exists":
+      return expected ? fieldValue !== undefined : fieldValue === undefined;
     case "regex":
       return typeof fieldValue === "string" && typeof expected === "string"
         ? new RegExp(expected).test(fieldValue)

@@ -2,6 +2,8 @@
  * Policy module exports.
  */
 
+export type { ConditionalDimensions } from "./condition-evaluator.js";
+export { conditionsMatch, deriveConditionalDimensions } from "./condition-evaluator.js";
 export type {
   Actor,
   EvaluationContext,

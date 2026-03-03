@@ -2,6 +2,22 @@
  * Policy module exports.
  */
 
+export type {
+  ApprovalDecisionStatus,
+  ApprovalEnforcementStatus,
+  ApprovalGateConfig,
+  ApprovalGateCreateInput,
+  ApprovalGateDecisionInput,
+  ApprovalGateEvaluateInput,
+  ApprovalGateEvaluateResult,
+  ApprovalGateRequest,
+  ApprovalPolicyEvaluationResult,
+} from "./approval-gate.js";
+export {
+  ApprovalGateService,
+  createApprovalGateService,
+  evaluatePolicyWithApprovalGate,
+} from "./approval-gate.js";
 export type { ConditionalDimensions } from "./condition-evaluator.js";
 export { conditionsMatch, deriveConditionalDimensions } from "./condition-evaluator.js";
 export type {
@@ -54,6 +70,7 @@ export type {
   PolicyCondition,
   PolicyEffect,
   PolicyEvaluatorConfig,
+  PolicyRiskLevel,
 } from "./policy-evaluator.js";
 export {
   createFailClosedEvaluator,
@@ -66,6 +83,7 @@ export type {
   PolicyCondition as CanonicalPolicyCondition,
   PolicyDocument as CanonicalPolicyDocument,
   PolicyEffect as CanonicalPolicyEffect,
+  PolicyRiskLevel as CanonicalPolicyRiskLevel,
   PolicyRule as CanonicalPolicyRule,
   PolicyScope as CanonicalPolicyScope,
 } from "./policy-schema.js";
@@ -73,6 +91,7 @@ export {
   PolicyConditionSchema,
   PolicyDocumentSchema,
   PolicyEffectSchema,
+  PolicyRiskLevelSchema,
   PolicyRuleSchema,
   PolicyScopeSchema,
 } from "./policy-schema.js";

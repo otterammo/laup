@@ -45,6 +45,8 @@ export interface PolicyCondition {
   value: unknown;
 }
 
+export type PolicyRiskLevel = "low" | "medium" | "high";
+
 export interface Policy {
   id: string;
   name: string;
@@ -57,6 +59,12 @@ export interface Policy {
   conditions?: PolicyCondition[];
   priority?: number;
   enabled?: boolean;
+  /** Marks an allowed action as requiring human approval before execution. */
+  requiresApproval?: boolean;
+  /** High-risk actions are treated as approval-gated by approval integrations. */
+  riskLevel?: PolicyRiskLevel;
+  /** Optional approval gate TTL override in milliseconds. */
+  approvalTtlMs?: number;
 }
 
 export interface EvaluationReason {

@@ -10,6 +10,19 @@ export type {
   ScopeChainEntry,
 } from "./evaluation-context.js";
 export { createEvaluationContext } from "./evaluation-context.js";
+export type {
+  EmergencyKillSwitchConfig,
+  KillSwitchActivationInput,
+  KillSwitchDeactivationInput,
+  KillSwitchEnforcementInput,
+  KillSwitchState,
+  KillSwitchStatus,
+} from "./kill-switch.js";
+export {
+  createEmergencyKillSwitch,
+  EmergencyKillSwitch,
+  KillSwitchBlockedError,
+} from "./kill-switch.js";
 export type { PermissionAuditLoggerConfig } from "./permission-audit.js";
 export {
   createPermissionAuditLogger,

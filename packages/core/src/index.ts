@@ -216,6 +216,7 @@ export type { FieldIssue } from "./parse.js";
 export { ParseError, parseCanonical, parseCanonicalString } from "./parse.js";
 export type {
   Actor,
+  BuiltInRole,
   CanonicalPolicyCondition,
   CanonicalPolicyDocument,
   CanonicalPolicyEffect,
@@ -241,13 +242,18 @@ export type {
   PolicyScope,
   PolicyValidationResult,
   Resource,
+  RolePolicyOptions,
   ScopeChainEntry,
 } from "./policy/index.js";
 export {
+  BUILT_IN_ROLES,
+  BuiltInRoleSchema,
   createEvaluationContext,
   createFailClosedEvaluator,
   createFailOpenEvaluator,
+  createIdentityRolePolicies,
   createPermissionAuditLogger,
+  createRolePolicies,
   evaluatePolicyWithAudit,
   MatchedRuleSchema,
   matchesGlob,
@@ -262,6 +268,8 @@ export {
   PolicyRuleSchema,
   PolicyScopeSchema,
   permissionEvaluation,
+  resolveBuiltInRoles,
+  resolveIdentityRoles,
   validatePolicyDocument,
   validatePolicyJson,
   validatePolicyYaml,

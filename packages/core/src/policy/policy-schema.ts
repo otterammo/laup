@@ -30,6 +30,9 @@ export const PolicyConditionSchema = z.object({
 });
 export type PolicyCondition = z.infer<typeof PolicyConditionSchema>;
 
+export const PolicyRiskLevelSchema = z.enum(["low", "medium", "high"]);
+export type PolicyRiskLevel = z.infer<typeof PolicyRiskLevelSchema>;
+
 export const PolicyRuleSchema = z.object({
   id: z.string().min(1),
   effect: PolicyEffectSchema,
@@ -39,6 +42,9 @@ export const PolicyRuleSchema = z.object({
   scopeId: z.string().min(1),
   conditions: z.array(PolicyConditionSchema).default([]),
   description: z.string().optional(),
+  requiresApproval: z.boolean().optional(),
+  riskLevel: PolicyRiskLevelSchema.optional(),
+  approvalTtlMs: z.number().int().positive().optional(),
 });
 export type PolicyRule = z.infer<typeof PolicyRuleSchema>;
 

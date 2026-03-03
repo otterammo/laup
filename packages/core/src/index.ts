@@ -20,6 +20,29 @@ export {
   SqlAuditStorage,
 } from "./audit-storage.js";
 export type {
+  ApiKeyAuthOptions,
+  AuthContext,
+  AuthFailure,
+  AuthIdentity,
+  AuthMethod,
+  AuthMiddlewareOptions,
+  AuthResult,
+  AuthSuccess,
+  OauthAuthOptions,
+  OidcClaims,
+  RequestLike,
+  SamlAssertion,
+  SamlAuthOptions,
+} from "./auth/index.js";
+export {
+  AuthIdentitySchema,
+  AuthMethodSchema,
+  authenticateApiKey,
+  authenticateOauth,
+  authenticateRequest,
+  authenticateSaml,
+} from "./auth/index.js";
+export type {
   Cache,
   CacheOptions,
   CacheStats,

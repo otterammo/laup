@@ -82,7 +82,6 @@ export type {
   UsageEventType,
 } from "./cost-schema.js";
 export {
-  AttributionDimensionSchema,
   aggregateUsage,
   aggregateUsageByAttribution,
   aggregateUsageByAttributions,
@@ -211,14 +210,6 @@ export {
   MemoryJobQueue,
 } from "./job-queue.js";
 export type {
-  McpHealthMonitorConfig,
-  McpHealthMonitorHooks,
-  McpHealthTransition,
-  McpLivenessChecker,
-  McpServerRegistryLike,
-} from "./mcp-health-monitor.js";
-export { McpHealthMonitorService } from "./mcp-health-monitor.js";
-export type {
   McpPropagationOptions,
   McpPropagationReport,
   McpPropagationTarget,
@@ -236,22 +227,16 @@ export type {
   McpHealthCheck,
   McpHealthState,
   McpHealthStatus,
-  McpLastCheckStatus,
   McpScope,
-  McpScopeContext,
   McpServer,
   McpTransport,
   McpValidationResult,
   McpVersionPin,
-  NormalizeMcpServerOptions,
   OrphanCheckResult,
 } from "./mcp-schema.js";
 export {
-  getEffectiveServersForScope,
-  getMcpScopeChain,
   getServersAtScope,
   isServerHealthy,
-  MCP_SCOPE_PRECEDENCE,
   McpAuditEntrySchema,
   McpAuditOperationSchema,
   McpCredentialRefSchema,
@@ -261,15 +246,21 @@ export {
   McpServerSchema,
   McpTransportSchema,
   McpVersionPinSchema,
-  mcpScopePrecedence,
-  normalizeMcpServerCredentials,
   parseServerId,
   resolveEffectiveServers,
-  resolveInheritedMcpServers,
-  resolveMcpCredentialValue,
-  serverAppliesToScope,
   validateMcpServer,
 } from "./mcp-schema.js";
+export type {
+  McpVersionEvaluation,
+  McpVersionEvaluationInput,
+  McpVersionNotification,
+  McpVersionNotificationType,
+} from "./mcp-versioning.js";
+export {
+  buildMcpVersionConstraint,
+  buildMcpVersionNotifications,
+  evaluateMcpVersion,
+} from "./mcp-versioning.js";
 export type { FieldIssue } from "./parse.js";
 export { ParseError, parseCanonical, parseCanonicalString } from "./parse.js";
 export type {
@@ -475,15 +466,6 @@ export {
   validatePolicyYaml,
 } from "./policy/index.js";
 export type {
-  InMemoryPricingProviderOptions,
-  PricingProvider,
-  PricingRefreshResult,
-} from "./pricing-provider.js";
-export {
-  createPricingProvider,
-  InMemoryPricingProvider,
-} from "./pricing-provider.js";
-export type {
   AggregateFunction,
   AggregateSpec,
   BuiltQuery,
@@ -609,7 +591,6 @@ export {
 } from "./usage-collector.js";
 export type {
   AggregatedUsage,
-  MultiDimensionUsageSummary,
   PaginatedResult,
   PaginationOptions,
   TimeBucket,

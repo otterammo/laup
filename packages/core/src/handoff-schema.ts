@@ -53,53 +53,42 @@ export const ContextFieldSchema = z.object({
 export type ContextField = z.infer<typeof ContextFieldSchema>;
 
 /**
- * Context packet for handoff (HAND-001 to HAND-003).
+ * Standard context packet format for handoff (HAND-001).
+ * Tool-agnostic by design: tool fields are open strings and context fields are generic records.
  */
 export const ContextPacketSchema = z.object({
   /** Unique packet ID */
-  id: z.string(),
+  packetId: z.string().min(1),
 
-  /** Schema version */
-  schemaVersion: z.string().default("1.0"),
+  /** Schema version (semver) */
+  schemaVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
 
-  /** Sending agent ID */
-  sourceAgent: z.string(),
+  /** Sending tool identifier */
+  sendingTool: z.string().min(1),
 
-  /** Target agent ID (for direct routing) */
-  targetAgent: z.string().optional(),
+  /** Receiving tool identifier */
+  receivingTool: z.string().min(1),
 
-  /** Handoff mode */
-  mode: HandoffModeSchema.default("sync"),
+  /** Current task payload */
+  task: z.record(z.string(), z.unknown()),
 
-  /** Routing policy */
-  routing: HandoffRoutingSchema.default("direct"),
+  /** Working context payload */
+  workingContext: z.record(z.string(), z.unknown()),
 
-  /** Timeout in seconds (for sync mode) */
-  timeoutSeconds: z.number().min(1).max(300).default(60),
+  /** Memory references */
+  memoryRefs: z.array(z.string()),
 
-  /** Conversation context */
-  conversation: z
-    .object({
-      /** Recent messages */
-      messages: z.array(
-        z.object({
-          role: z.enum(["user", "assistant", "system"]),
-          content: z.string(),
-          timestamp: z.string().optional(),
-        }),
-      ),
-      /** Current task/goal */
-      task: z.string().optional(),
-      /** Relevant files/documents */
-      files: z.array(z.string()).optional(),
-    })
-    .optional(),
+  /** Conversation summary */
+  conversationSummary: z.string(),
 
-  /** Session state */
-  state: z.record(z.string(), z.unknown()).optional(),
+  /** Constraints to apply during handoff */
+  constraints: z.array(z.string()),
 
-  /** Capabilities required from receiver */
-  requiredCapabilities: z.array(z.string()).optional(),
+  /** Permission policy payload */
+  permissionPolicy: z.record(z.string(), z.unknown()),
+
+  /** Creation timestamp */
+  timestamp: z.string().datetime(),
 
   /** Field subset for partial handoff (HAND-009) */
   fieldSubset: z.array(ContextFieldSchema).optional(),
@@ -112,20 +101,6 @@ export const ContextPacketSchema = z.object({
 
   /** Original size before compression */
   originalSizeBytes: z.number().optional(),
-
-  /** Metadata */
-  metadata: z
-    .object({
-      /** Creation timestamp */
-      createdAt: z.string(),
-      /** Priority */
-      priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),
-      /** TTL in seconds */
-      ttlSeconds: z.number().optional(),
-      /** Tags for categorization */
-      tags: z.array(z.string()).optional(),
-    })
-    .optional(),
 });
 
 export type ContextPacket = z.infer<typeof ContextPacketSchema>;
@@ -251,42 +226,36 @@ export interface SecurityValidationResult {
 export function validatePacketSecurity(packet: ContextPacket): SecurityValidationResult {
   const issues: SecurityValidationResult["issues"] = [];
 
-  // Check for sensitive patterns in state
-  if (packet.state) {
-    const sensitivePatterns = [/password/i, /secret/i, /api_key/i, /token/i, /credential/i];
+  // Check for sensitive patterns in working context keys
+  const sensitivePatterns = [/password/i, /secret/i, /api_key/i, /token/i, /credential/i];
 
-    for (const key of Object.keys(packet.state)) {
-      for (const pattern of sensitivePatterns) {
-        if (pattern.test(key)) {
-          issues.push({
-            severity: "warning",
-            field: `state.${key}`,
-            message: `Field "${key}" may contain sensitive data`,
-          });
-        }
+  for (const key of Object.keys(packet.workingContext)) {
+    for (const pattern of sensitivePatterns) {
+      if (pattern.test(key)) {
+        issues.push({
+          severity: "warning",
+          field: `workingContext.${key}`,
+          message: `Field "${key}" may contain sensitive data`,
+        });
       }
     }
   }
 
-  // Check conversation for PII patterns
-  if (packet.conversation?.messages) {
-    const piiPatterns = [
-      /\b\d{3}-\d{2}-\d{4}\b/, // SSN
-      /\b\d{16}\b/, // Credit card
-      /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/, // Email
-    ];
+  // Check conversation summary for PII patterns
+  const piiPatterns = [
+    /\b\d{3}-\d{2}-\d{4}\b/, // SSN
+    /\b\d{16}\b/, // Credit card
+    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/, // Email
+  ];
 
-    for (const msg of packet.conversation.messages) {
-      for (const pattern of piiPatterns) {
-        if (pattern.test(msg.content)) {
-          issues.push({
-            severity: "warning",
-            field: "conversation.messages",
-            message: "Message may contain PII",
-          });
-          break;
-        }
-      }
+  for (const pattern of piiPatterns) {
+    if (pattern.test(packet.conversationSummary)) {
+      issues.push({
+        severity: "warning",
+        field: "conversationSummary",
+        message: "Conversation summary may contain PII",
+      });
+      break;
     }
   }
 
@@ -321,10 +290,17 @@ export function createPartialPacket(
   fields: ContextField[],
 ): Partial<ContextPacket> {
   const partial: Partial<ContextPacket> = {
-    id: packet.id,
+    packetId: packet.packetId,
     schemaVersion: packet.schemaVersion,
-    sourceAgent: packet.sourceAgent,
-    mode: packet.mode,
+    sendingTool: packet.sendingTool,
+    receivingTool: packet.receivingTool,
+    task: packet.task,
+    workingContext: packet.workingContext,
+    memoryRefs: packet.memoryRefs,
+    conversationSummary: packet.conversationSummary,
+    constraints: packet.constraints,
+    permissionPolicy: packet.permissionPolicy,
+    timestamp: packet.timestamp,
   };
 
   for (const field of fields) {

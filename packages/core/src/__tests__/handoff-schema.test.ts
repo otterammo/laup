@@ -11,29 +11,27 @@ import {
 
 describe("handoff-schema", () => {
   const samplePacket: ContextPacket = {
-    id: "packet-1",
-    schemaVersion: "1.0",
-    sourceAgent: "agent-a",
-    targetAgent: "agent-b",
-    mode: "sync",
-    routing: "direct",
-    timeoutSeconds: 60,
-    conversation: {
-      messages: [
-        { role: "user", content: "Help me with this task" },
-        { role: "assistant", content: "Sure, I can help" },
-      ],
-      task: "Code review",
+    packetId: "packet-1",
+    schemaVersion: "1.0.0",
+    sendingTool: "codex",
+    receivingTool: "claude-code",
+    task: {
+      type: "code-review",
+      title: "Review auth middleware",
     },
-    state: {
+    workingContext: {
       currentFile: "src/main.ts",
       lineNumber: 42,
     },
-    compressed: false,
-    metadata: {
-      createdAt: "2026-01-15T10:00:00Z",
-      priority: "normal",
+    memoryRefs: ["mem://handoff/123"],
+    conversationSummary: "User asked for help with a code review.",
+    constraints: ["Do not modify public API"],
+    permissionPolicy: {
+      allow: ["read", "write"],
+      deny: ["network"],
     },
+    timestamp: "2026-01-15T10:00:00Z",
+    compressed: false,
   };
 
   describe("ContextPacketSchema", () => {
@@ -42,33 +40,42 @@ describe("handoff-schema", () => {
       expect(result.success).toBe(true);
     });
 
-    it("validates minimal packet", () => {
+    it("requires all HAND-001 fields", () => {
       const minimal = {
-        id: "p-1",
-        sourceAgent: "agent-a",
+        packetId: "p-1",
+        schemaVersion: "1.0.0",
+        sendingTool: "codex",
+        receivingTool: "claude-code",
+        task: {},
+        workingContext: {},
+        memoryRefs: [],
+        conversationSummary: "summary",
+        constraints: [],
+        permissionPolicy: {},
+        timestamp: "2026-01-15T10:00:00Z",
       };
       const result = ContextPacketSchema.safeParse(minimal);
       expect(result.success).toBe(true);
     });
 
-    it("rejects packet without id", () => {
-      const invalid = { ...samplePacket, id: undefined };
+    it("rejects packet without packetId", () => {
+      const invalid = { ...samplePacket, packetId: undefined };
       const result = ContextPacketSchema.safeParse(invalid);
       expect(result.success).toBe(false);
     });
 
-    it("validates async mode", () => {
-      const asyncPacket = { ...samplePacket, mode: "async" };
-      const result = ContextPacketSchema.safeParse(asyncPacket);
-      expect(result.success).toBe(true);
+    it("requires semver schemaVersion", () => {
+      const invalidVersion = { ...samplePacket, schemaVersion: "1.0" };
+      const result = ContextPacketSchema.safeParse(invalidVersion);
+      expect(result.success).toBe(false);
     });
 
     it("validates with field subset", () => {
       const withSubset: ContextPacket = {
         ...samplePacket,
         fieldSubset: [
-          { path: "conversation.task", required: true },
-          { path: "state.currentFile", redact: false },
+          { path: "task.title", required: true },
+          { path: "workingContext.currentFile", redact: false },
         ],
       };
       const result = ContextPacketSchema.safeParse(withSubset);
@@ -97,7 +104,7 @@ describe("handoff-schema", () => {
     it("warns about sensitive field names", () => {
       const sensitivePacket: ContextPacket = {
         ...samplePacket,
-        state: {
+        workingContext: {
           password: "secret123",
           api_key: "sk-xxx",
         },
@@ -107,12 +114,10 @@ describe("handoff-schema", () => {
       expect(result.issues.some((i) => i.field.includes("password"))).toBe(true);
     });
 
-    it("warns about PII in messages", () => {
+    it("warns about PII in conversation summary", () => {
       const piiPacket: ContextPacket = {
         ...samplePacket,
-        conversation: {
-          messages: [{ role: "user", content: "My email is test@example.com" }],
-        },
+        conversationSummary: "My email is test@example.com",
       };
       const result = validatePacketSecurity(piiPacket);
       expect(result.issues.some((i) => i.message.includes("PII"))).toBe(true);
@@ -127,12 +132,7 @@ describe("handoff-schema", () => {
     it("returns true for large packets", () => {
       const largePacket: ContextPacket = {
         ...samplePacket,
-        conversation: {
-          messages: Array(100).fill({
-            role: "user",
-            content: "A".repeat(1000),
-          }),
-        },
+        conversationSummary: "A".repeat(100_000),
       };
       expect(shouldCompressPacket(largePacket)).toBe(true);
     });
@@ -153,12 +153,12 @@ describe("handoff-schema", () => {
   describe("createPartialPacket (HAND-009)", () => {
     it("extracts specified fields", () => {
       const fields: ContextField[] = [
-        { path: "conversation.task", required: false },
-        { path: "state.currentFile", required: false },
+        { path: "task.title", required: false },
+        { path: "workingContext.currentFile", required: false },
       ];
       const partial = createPartialPacket(samplePacket, fields);
-      expect(partial.id).toBe(samplePacket.id);
-      expect((partial as Record<string, unknown>)["conversation"]).toBeDefined();
+      expect(partial.packetId).toBe(samplePacket.packetId);
+      expect(partial).toHaveProperty("task");
     });
 
     it("throws for missing required field", () => {
@@ -167,11 +167,13 @@ describe("handoff-schema", () => {
     });
 
     it("redacts sensitive fields", () => {
-      const fields: ContextField[] = [{ path: "state.currentFile", redact: true, required: false }];
+      const fields: ContextField[] = [
+        { path: "workingContext.currentFile", redact: true, required: false },
+      ];
       const partial = createPartialPacket(samplePacket, fields);
-      expect((partial as { state?: { currentFile?: string } }).state?.currentFile).toBe(
-        "[REDACTED]",
-      );
+      expect(
+        (partial as { workingContext?: { currentFile?: string } }).workingContext?.currentFile,
+      ).toBe("[REDACTED]");
     });
   });
 });

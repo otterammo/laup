@@ -3,6 +3,7 @@
  * Semantic retrieval support (MEM-002).
  */
 
+import type { AuditStorage } from "./audit-storage.js";
 import type { DbAdapter } from "./db-adapter.js";
 
 export type MemoryScope = "session" | "project" | "org";
@@ -74,6 +75,7 @@ export interface MemoryStore {
     context: MemoryContext,
     options?: MemoryReadOptions,
   ): Promise<MemoryRecord | null>;
+  deleteById(id: string, context: MemoryContext): Promise<boolean>;
   getByKey(
     key: string,
     context: MemoryContext,
@@ -91,6 +93,7 @@ export interface MemoryStore {
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_TOP_K = 10;
 const DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small";
+const DEFAULT_AUDIT_ACTOR = "system:memory-store";
 
 function randomId(): string {
   return `mem_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -158,6 +161,8 @@ class DefaultMemoryEmbeddingProvider implements MemoryEmbeddingProvider {
 }
 
 export interface MemoryStoreRuntimeOptions {
+  auditStorage?: AuditStorage;
+  auditActor?: string;
   embeddingProvider?: MemoryEmbeddingProvider;
   defaultEmbeddingModel?: string;
   defaultTopK?: number;
@@ -180,20 +185,54 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
+interface MemoryAuditEvent {
+  action: string;
+  targetId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+class MemoryAuditLogger {
+  constructor(
+    private readonly auditStorage?: AuditStorage,
+    private readonly actor = DEFAULT_AUDIT_ACTOR,
+  ) {}
+
+  async record(event: MemoryAuditEvent): Promise<void> {
+    if (!this.auditStorage) return;
+    try {
+      await this.auditStorage.append({
+        category: "memory",
+        action: event.action,
+        actor: this.actor,
+        targetId: event.targetId,
+        targetType: "memory",
+        severity: "info",
+        ...(event.metadata ? { metadata: event.metadata } : {}),
+      });
+    } catch {
+      // Best effort: memory operations must succeed even if audit sink is unavailable.
+    }
+  }
+}
+
 export class InMemoryMemoryStore implements MemoryStore {
   private records = new Map<string, MemoryRecord>();
   private keyToId = new Map<string, string>();
   private embeddingProvider: MemoryEmbeddingProvider;
   private defaultEmbeddingModel: string;
   private defaultTopK: number;
+  private auditLogger: MemoryAuditLogger;
 
   constructor(options?: MemoryStoreRuntimeOptions) {
     this.embeddingProvider = options?.embeddingProvider ?? new DefaultMemoryEmbeddingProvider();
     this.defaultEmbeddingModel = options?.defaultEmbeddingModel ?? DEFAULT_EMBEDDING_MODEL;
     this.defaultTopK = Math.max(1, options?.defaultTopK ?? DEFAULT_TOP_K);
+    this.auditLogger = new MemoryAuditLogger(options?.auditStorage, options?.auditActor);
   }
 
-  async init(): Promise<void> {}
+  async init(): Promise<void> {
+    await this.auditLogger.record({ action: "memory.init" });
+  }
 
   private makeKeyIndex(
     context: Pick<MemoryRecord, "orgId" | "projectId" | "sessionId">,
@@ -250,6 +289,18 @@ export class InMemoryMemoryStore implements MemoryStore {
     }
 
     this.records.set(id, record);
+    await this.auditLogger.record({
+      action: "memory.write",
+      targetId: id,
+      metadata: {
+        scope: input.scope,
+        orgId: scopeContext.orgId,
+        projectId: scopeContext.projectId,
+        sessionId: scopeContext.sessionId,
+        key: nextKey,
+      },
+    });
+
     return record;
   }
 
@@ -267,10 +318,24 @@ export class InMemoryMemoryStore implements MemoryStore {
     const now = options?.now ?? new Date();
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
 
-    return Array.from(this.records.values())
+    const records = Array.from(this.records.values())
       .filter((record) => !isExpired(record, now))
       .filter((record) => canRead(record, scope, context, includeShared))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+    await this.auditLogger.record({
+      action: "memory.listByScope",
+      metadata: {
+        scope,
+        orgId: context.orgId,
+        projectId: context.projectId,
+        sessionId: context.sessionId,
+        includeSharedFromBroaderScopes: includeShared,
+        resultCount: records.length,
+      },
+    });
+
+    return records;
   }
 
   async getById(
@@ -281,14 +346,51 @@ export class InMemoryMemoryStore implements MemoryStore {
     const now = options?.now ?? new Date();
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
     const record = this.records.get(id);
-    if (!record || isExpired(record, now)) return null;
+    if (!record || isExpired(record, now)) {
+      await this.auditLogger.record({
+        action: "memory.getById",
+        targetId: id,
+        metadata: { found: false },
+      });
+      return null;
+    }
 
     const canReadAtAnyScope =
       canRead(record, "session", context, includeShared) ||
       canRead(record, "project", context, includeShared) ||
       canRead(record, "org", context, includeShared);
 
-    return canReadAtAnyScope ? record : null;
+    const result = canReadAtAnyScope ? record : null;
+    await this.auditLogger.record({
+      action: "memory.getById",
+      targetId: id,
+      metadata: {
+        found: Boolean(result),
+        orgId: context.orgId,
+        projectId: context.projectId,
+        sessionId: context.sessionId,
+        includeSharedFromBroaderScopes: includeShared,
+      },
+    });
+
+    return result;
+  }
+
+  async deleteById(id: string, context: MemoryContext): Promise<boolean> {
+    const record = this.records.get(id);
+    if (!record) return false;
+
+    const canDelete =
+      record.orgId === context.orgId &&
+      (record.scope !== "project" || record.projectId === context.projectId) &&
+      (record.scope !== "session" ||
+        (record.projectId === context.projectId && record.sessionId === context.sessionId));
+
+    if (!canDelete) return false;
+
+    this.records.delete(id);
+    if (record.key) this.keyToId.delete(this.makeKeyIndex(record, record.key));
+    return true;
   }
 
   async getByKey(
@@ -310,13 +412,42 @@ export class InMemoryMemoryStore implements MemoryStore {
     };
 
     const sessionScopedId = this.keyToId.get(this.makeKeyIndex(sessionContext, key));
-    if (sessionScopedId) return this.getById(sessionScopedId, context, options);
+    if (sessionScopedId) {
+      const result = await this.getById(sessionScopedId, context, options);
+      await this.auditLogger.record({
+        action: "memory.getByKey",
+        ...(result?.id ? { targetId: result.id } : {}),
+        metadata: { key, orgId: context.orgId, found: Boolean(result), scope: "session" },
+      });
+      return result;
+    }
 
     const projectScopedId = this.keyToId.get(this.makeKeyIndex(projectContext, key));
-    if (projectScopedId) return this.getById(projectScopedId, context, options);
+    if (projectScopedId) {
+      const result = await this.getById(projectScopedId, context, options);
+      await this.auditLogger.record({
+        action: "memory.getByKey",
+        ...(result?.id ? { targetId: result.id } : {}),
+        metadata: { key, orgId: context.orgId, found: Boolean(result), scope: "project" },
+      });
+      return result;
+    }
 
     const orgScopedId = this.keyToId.get(this.makeKeyIndex(orgContext, key));
-    if (orgScopedId) return this.getById(orgScopedId, context, options);
+    if (orgScopedId) {
+      const result = await this.getById(orgScopedId, context, options);
+      await this.auditLogger.record({
+        action: "memory.getByKey",
+        ...(result?.id ? { targetId: result.id } : {}),
+        metadata: { key, orgId: context.orgId, found: Boolean(result), scope: "org" },
+      });
+      return result;
+    }
+
+    await this.auditLogger.record({
+      action: "memory.getByKey",
+      metadata: { key, orgId: context.orgId, found: false },
+    });
 
     return null;
   }
@@ -355,6 +486,15 @@ export class InMemoryMemoryStore implements MemoryStore {
         removed += 1;
       }
     }
+
+    await this.auditLogger.record({
+      action: "memory.pruneExpired",
+      metadata: {
+        removed,
+        cutoff: now.toISOString(),
+      },
+    });
+
     return removed;
   }
 }
@@ -378,6 +518,7 @@ export class SqlMemoryStore implements MemoryStore {
   private embeddingProvider: MemoryEmbeddingProvider;
   private defaultEmbeddingModel: string;
   private defaultTopK: number;
+  private auditLogger: MemoryAuditLogger;
 
   constructor(
     private db: DbAdapter,
@@ -386,6 +527,7 @@ export class SqlMemoryStore implements MemoryStore {
     this.embeddingProvider = options?.embeddingProvider ?? new DefaultMemoryEmbeddingProvider();
     this.defaultEmbeddingModel = options?.defaultEmbeddingModel ?? DEFAULT_EMBEDDING_MODEL;
     this.defaultTopK = Math.max(1, options?.defaultTopK ?? DEFAULT_TOP_K);
+    this.auditLogger = new MemoryAuditLogger(options?.auditStorage, options?.auditActor);
   }
 
   async init(): Promise<void> {
@@ -422,6 +564,8 @@ export class SqlMemoryStore implements MemoryStore {
     await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_memories_expires_at ON memories(expires_at)`,
     );
+
+    await this.auditLogger.record({ action: "memory.init" });
   }
 
   async write(input: MemoryWriteInput): Promise<MemoryRecord> {
@@ -465,7 +609,7 @@ export class SqlMemoryStore implements MemoryStore {
       ],
     );
 
-    return {
+    const record: MemoryRecord = {
       id,
       ...(key ? { key } : {}),
       content: input.content,
@@ -479,6 +623,20 @@ export class SqlMemoryStore implements MemoryStore {
       embedding,
       embeddingModel,
     };
+
+    await this.auditLogger.record({
+      action: "memory.write",
+      targetId: id,
+      metadata: {
+        scope: input.scope,
+        orgId: scopeContext.orgId,
+        projectId: scopeContext.projectId,
+        sessionId: scopeContext.sessionId,
+        key,
+      },
+    });
+
+    return record;
   }
 
   async writeBatch(inputs: MemoryWriteInput[]): Promise<MemoryRecord[]> {
@@ -525,9 +683,23 @@ export class SqlMemoryStore implements MemoryStore {
     query += ` ORDER BY created_at ASC`;
 
     const result = await this.db.query<MemoryRow>(query, params);
-    return result.rows
+    const records = result.rows
       .map((row) => this.rowToRecord(row))
       .filter((record) => canRead(record, scope, context, includeShared));
+
+    await this.auditLogger.record({
+      action: "memory.listByScope",
+      metadata: {
+        scope,
+        orgId: context.orgId,
+        projectId: context.projectId,
+        sessionId: context.sessionId,
+        includeSharedFromBroaderScopes: includeShared,
+        resultCount: records.length,
+      },
+    });
+
+    return records;
   }
 
   async getById(
@@ -545,17 +717,68 @@ export class SqlMemoryStore implements MemoryStore {
       [id],
     );
 
-    if (!row) return null;
+    if (!row) {
+      await this.auditLogger.record({
+        action: "memory.getById",
+        targetId: id,
+        metadata: { found: false },
+      });
+      return null;
+    }
 
     const record = this.rowToRecord(row);
-    if (isExpired(record, now)) return null;
+    if (isExpired(record, now)) {
+      await this.auditLogger.record({
+        action: "memory.getById",
+        targetId: id,
+        metadata: { found: false, reason: "expired" },
+      });
+      return null;
+    }
 
     const canReadAtAnyScope =
       canRead(record, "session", context, includeShared) ||
       canRead(record, "project", context, includeShared) ||
       canRead(record, "org", context, includeShared);
 
-    return canReadAtAnyScope ? record : null;
+    const visibleRecord = canReadAtAnyScope ? record : null;
+
+    await this.auditLogger.record({
+      action: "memory.getById",
+      targetId: id,
+      metadata: {
+        found: Boolean(visibleRecord),
+        orgId: context.orgId,
+        projectId: context.projectId,
+        sessionId: context.sessionId,
+        includeSharedFromBroaderScopes: includeShared,
+      },
+    });
+
+    return visibleRecord;
+  }
+
+  async deleteById(id: string, context: MemoryContext): Promise<boolean> {
+    const row = await this.db.queryOne<MemoryRow>(
+      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, embedding, embedding_model, created_at, expires_at
+       FROM memories
+       WHERE id = ?`,
+      [id],
+    );
+
+    if (!row) return false;
+
+    const record = this.rowToRecord(row);
+    const canDelete =
+      record.orgId === context.orgId &&
+      (record.scope !== "project" || record.projectId === context.projectId) &&
+      (record.scope !== "session" ||
+        (record.projectId === context.projectId && record.sessionId === context.sessionId));
+
+    if (!canDelete) return false;
+
+    const removed = await this.db.execute(`DELETE FROM memories WHERE id = ?`, [id]);
+    return removed > 0;
   }
 
   async getByKey(
@@ -595,17 +818,43 @@ export class SqlMemoryStore implements MemoryStore {
       ],
     );
 
-    if (!row) return null;
+    if (!row) {
+      await this.auditLogger.record({
+        action: "memory.getByKey",
+        metadata: { key, orgId: context.orgId, found: false },
+      });
+      return null;
+    }
 
     const record = this.rowToRecord(row);
-    if (isExpired(record, now)) return null;
+    if (isExpired(record, now)) {
+      await this.auditLogger.record({
+        action: "memory.getByKey",
+        targetId: record.id,
+        metadata: { key, orgId: context.orgId, found: false, reason: "expired" },
+      });
+      return null;
+    }
 
     const canReadAtAnyScope =
       canRead(record, "session", context, includeShared) ||
       canRead(record, "project", context, includeShared) ||
       canRead(record, "org", context, includeShared);
 
-    return canReadAtAnyScope ? record : null;
+    const visibleRecord = canReadAtAnyScope ? record : null;
+
+    await this.auditLogger.record({
+      action: "memory.getByKey",
+      targetId: record.id,
+      metadata: {
+        key,
+        orgId: context.orgId,
+        found: Boolean(visibleRecord),
+        includeSharedFromBroaderScopes: includeShared,
+      },
+    });
+
+    return visibleRecord;
   }
 
   async semanticSearch(
@@ -629,10 +878,20 @@ export class SqlMemoryStore implements MemoryStore {
   }
 
   async pruneExpired(now = new Date()): Promise<number> {
-    return this.db.execute(
+    const removed = await this.db.execute(
       `DELETE FROM memories WHERE expires_at IS NOT NULL AND expires_at <= ?`,
       [now.toISOString()],
     );
+
+    await this.auditLogger.record({
+      action: "memory.pruneExpired",
+      metadata: {
+        removed,
+        cutoff: now.toISOString(),
+      },
+    });
+
+    return removed;
   }
 
   private rowToRecord(row: MemoryRow): MemoryRecord {
@@ -662,8 +921,8 @@ export class SqlMemoryStore implements MemoryStore {
   }
 }
 
-export function createMemoryStore(db: DbAdapter): MemoryStore {
-  return new SqlMemoryStore(db);
+export function createMemoryStore(db: DbAdapter, options?: MemoryStoreRuntimeOptions): MemoryStore {
+  return new SqlMemoryStore(db, options);
 }
 
 export function createSemanticMemoryStore(options?: MemoryStoreRuntimeOptions): MemoryStore {

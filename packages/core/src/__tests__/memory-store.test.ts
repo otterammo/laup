@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { InMemoryAuditStorage } from "../audit-storage.js";
 import {
   InMemoryMemoryStore,
   type MemoryContext,
@@ -176,5 +177,39 @@ describe("memory-store", () => {
         context,
       }),
     ).rejects.toThrow(/already in use|unique/i);
+  });
+
+  it("records an audit trail for memory operations", async () => {
+    const auditStorage = new InMemoryAuditStorage();
+    await auditStorage.init();
+
+    const auditedStore = new InMemoryMemoryStore({
+      auditStorage,
+      auditActor: "tester",
+    });
+    await auditedStore.init();
+
+    await auditedStore.write({
+      id: "audited-memory",
+      key: "checklist",
+      content: "Run post-deploy smoke checks",
+      scope: "project",
+      context,
+    });
+
+    await auditedStore.listByScope("project", context);
+    await auditedStore.getById("audited-memory", context);
+    await auditedStore.getByKey("checklist", context);
+    await auditedStore.pruneExpired(new Date("2030-01-01T00:00:00.000Z"));
+
+    const page = await auditStorage.query({ category: "memory", actor: "tester" }, 50, 0);
+    const actions = page.entries.map((entry) => entry.action);
+
+    expect(actions).toContain("memory.init");
+    expect(actions).toContain("memory.write");
+    expect(actions).toContain("memory.listByScope");
+    expect(actions).toContain("memory.getById");
+    expect(actions).toContain("memory.getByKey");
+    expect(actions).toContain("memory.pruneExpired");
   });
 });

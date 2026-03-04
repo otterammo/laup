@@ -18,6 +18,7 @@ export const AuditCategorySchema = z.enum([
   "security", // Security events
   "mcp", // MCP server operations
   "skill", // Skill operations
+  "memory", // Memory read/write/search operations
 ]);
 
 export type AuditCategory = z.infer<typeof AuditCategorySchema>;

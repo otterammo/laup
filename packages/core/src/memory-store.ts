@@ -187,6 +187,18 @@ export class InMemoryMemoryStore implements MemoryStore {
   }
 }
 
+interface MemoryRow {
+  id: string;
+  content: string;
+  scope: MemoryScope;
+  org_id: string;
+  project_id: string | null;
+  session_id: string | null;
+  metadata: string | null;
+  created_at: string;
+  expires_at: string | null;
+}
+
 export class SqlMemoryStore implements MemoryStore {
   constructor(private db: DbAdapter) {}
 
@@ -301,7 +313,7 @@ export class SqlMemoryStore implements MemoryStore {
 
     query += ` ORDER BY created_at ASC`;
 
-    const result = await this.db.query<Record<string, unknown>>(query, params);
+    const result = await this.db.query<MemoryRow>(query, params);
     return result.rows
       .map((row) => this.rowToRecord(row))
       .filter((record) => canRead(record, scope, context, includeShared));
@@ -315,7 +327,7 @@ export class SqlMemoryStore implements MemoryStore {
     const now = options?.now ?? new Date();
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
 
-    const row = await this.db.queryOne<Record<string, unknown>>(
+    const row = await this.db.queryOne<MemoryRow>(
       `SELECT id, content, scope, org_id, project_id, session_id, metadata, created_at, expires_at
        FROM memories
        WHERE id = ?`,
@@ -342,7 +354,7 @@ export class SqlMemoryStore implements MemoryStore {
     );
   }
 
-  private rowToRecord(row: Record<string, unknown>): MemoryRecord {
+  private rowToRecord(row: MemoryRow): MemoryRecord {
     const metadataRaw = row.metadata;
     const metadata =
       typeof metadataRaw === "string"

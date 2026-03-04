@@ -261,6 +261,19 @@ export {
   buildMcpVersionNotifications,
   evaluateMcpVersion,
 } from "./mcp-versioning.js";
+export type {
+  MemoryContext,
+  MemoryReadOptions,
+  MemoryRecord,
+  MemoryScope,
+  MemoryStore,
+  MemoryWriteInput,
+} from "./memory-store.js";
+export {
+  createMemoryStore,
+  InMemoryMemoryStore,
+  SqlMemoryStore,
+} from "./memory-store.js";
 export type { FieldIssue } from "./parse.js";
 export { ParseError, parseCanonical, parseCanonicalString } from "./parse.js";
 export type {

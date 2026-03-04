@@ -28,6 +28,92 @@ function escapeYamlDoubleQuoted(value: string): string {
 }
 
 /**
+ * Convert a slash command (e.g. "/review") into a filesystem-safe base name.
+ * Slash-command-capable tools resolve command names from file names, so this
+ * must be derived from trigger.command (not skill.name).
+ */
+function commandFileBaseName(skill: Skill): string {
+  const command = skill.trigger.command.startsWith("/")
+    ? skill.trigger.command.slice(1)
+    : skill.trigger.command;
+  return command.replace(/[^a-z0-9-]/gi, "-");
+}
+
+function renderMarkdownSkill(skill: Skill): string {
+  const lines: string[] = [];
+
+  // Header
+  lines.push(`# ${skill.name}`);
+  lines.push("");
+  lines.push(skill.description);
+  lines.push("");
+
+  // Trigger
+  lines.push("## Trigger");
+  lines.push("");
+  lines.push(`\`${skill.trigger.command}\``);
+  if (skill.trigger.aliases && skill.trigger.aliases.length > 0) {
+    lines.push("");
+    lines.push(`Aliases: ${skill.trigger.aliases.join(", ")}`);
+  }
+  lines.push("");
+
+  // Parameters
+  if (skill.parameters.length > 0) {
+    lines.push("## Parameters");
+    lines.push("");
+    lines.push("Prompt for all required parameters when this command is invoked.");
+    lines.push("");
+    for (const param of skill.parameters) {
+      const required = param.required ? "(required)" : "(optional)";
+      const defaultVal = param.default !== undefined ? ` [default: ${param.default}]` : "";
+      lines.push(`- **${param.name}** \`${param.type}\` ${required}${defaultVal}`);
+      if (param.description) {
+        lines.push(`  ${param.description}`);
+      }
+      if (param.options) {
+        lines.push(`  Options: ${param.options.join(", ")}`);
+      }
+    }
+    lines.push("");
+  }
+
+  // Prompt template
+  lines.push("## Prompt");
+  lines.push("");
+  if (skill.system) {
+    lines.push("**System:**");
+    lines.push("```");
+    lines.push(skill.system);
+    lines.push("```");
+    lines.push("");
+  }
+  lines.push("**User:**");
+  lines.push("```");
+  lines.push(skill.prompt);
+  lines.push("```");
+  lines.push("");
+
+  // Metadata
+  if (skill.metadata) {
+    lines.push("## Metadata");
+    lines.push("");
+    if (skill.metadata.author) {
+      lines.push(`- Author: ${skill.metadata.author}`);
+    }
+    if (skill.metadata.license) {
+      lines.push(`- License: ${skill.metadata.license}`);
+    }
+    if (skill.metadata.tags && skill.metadata.tags.length > 0) {
+      lines.push(`- Tags: ${skill.metadata.tags.join(", ")}`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+/**
  * Claude Code skill renderer.
  * Renders skills as markdown with slash command documentation.
  */
@@ -36,80 +122,62 @@ export class ClaudeCodeSkillRenderer implements SkillRenderer {
   readonly displayName = "Claude Code";
 
   render(skill: Skill): string {
-    const lines: string[] = [];
-
-    // Header
-    lines.push(`# ${skill.name}`);
-    lines.push("");
-    lines.push(skill.description);
-    lines.push("");
-
-    // Trigger
-    lines.push(`## Trigger`);
-    lines.push("");
-    lines.push(`\`${skill.trigger.command}\``);
-    if (skill.trigger.aliases && skill.trigger.aliases.length > 0) {
-      lines.push("");
-      lines.push(`Aliases: ${skill.trigger.aliases.join(", ")}`);
-    }
-    lines.push("");
-
-    // Parameters
-    if (skill.parameters.length > 0) {
-      lines.push("## Parameters");
-      lines.push("");
-      for (const param of skill.parameters) {
-        const required = param.required ? "(required)" : "(optional)";
-        const defaultVal = param.default !== undefined ? ` [default: ${param.default}]` : "";
-        lines.push(`- **${param.name}** \`${param.type}\` ${required}${defaultVal}`);
-        if (param.description) {
-          lines.push(`  ${param.description}`);
-        }
-        if (param.options) {
-          lines.push(`  Options: ${param.options.join(", ")}`);
-        }
-      }
-      lines.push("");
-    }
-
-    // Prompt template
-    lines.push("## Prompt");
-    lines.push("");
-    if (skill.system) {
-      lines.push("**System:**");
-      lines.push("```");
-      lines.push(skill.system);
-      lines.push("```");
-      lines.push("");
-    }
-    lines.push("**User:**");
-    lines.push("```");
-    lines.push(skill.prompt);
-    lines.push("```");
-    lines.push("");
-
-    // Metadata
-    if (skill.metadata) {
-      lines.push("## Metadata");
-      lines.push("");
-      if (skill.metadata.author) {
-        lines.push(`- Author: ${skill.metadata.author}`);
-      }
-      if (skill.metadata.license) {
-        lines.push(`- License: ${skill.metadata.license}`);
-      }
-      if (skill.metadata.tags && skill.metadata.tags.length > 0) {
-        lines.push(`- Tags: ${skill.metadata.tags.join(", ")}`);
-      }
-      lines.push("");
-    }
-
-    return lines.join("\n").trimEnd();
+    return renderMarkdownSkill(skill);
   }
 
   getFilename(skill: Skill): string {
-    const safeName = skill.name.replace(/[^a-z0-9-]/gi, "-");
-    return `skill-${safeName}.md`;
+    return `${commandFileBaseName(skill)}.md`;
+  }
+}
+
+/**
+ * Codex skill renderer.
+ * Uses markdown command files derived from slash command names.
+ */
+export class CodexSkillRenderer implements SkillRenderer {
+  readonly toolId = "codex";
+  readonly displayName = "Codex CLI";
+
+  render(skill: Skill): string {
+    return renderMarkdownSkill(skill);
+  }
+
+  getFilename(skill: Skill): string {
+    return `${commandFileBaseName(skill)}.md`;
+  }
+}
+
+/**
+ * OpenCode skill renderer.
+ * Uses markdown command files derived from slash command names.
+ */
+export class OpenCodeSkillRenderer implements SkillRenderer {
+  readonly toolId = "opencode";
+  readonly displayName = "OpenCode";
+
+  render(skill: Skill): string {
+    return renderMarkdownSkill(skill);
+  }
+
+  getFilename(skill: Skill): string {
+    return `${commandFileBaseName(skill)}.md`;
+  }
+}
+
+/**
+ * GitHub Copilot skill renderer.
+ * Uses markdown command files derived from slash command names.
+ */
+export class CopilotSkillRenderer implements SkillRenderer {
+  readonly toolId = "copilot";
+  readonly displayName = "GitHub Copilot";
+
+  render(skill: Skill): string {
+    return renderMarkdownSkill(skill);
+  }
+
+  getFilename(skill: Skill): string {
+    return `${commandFileBaseName(skill)}.md`;
   }
 }
 
@@ -152,6 +220,8 @@ export class CursorSkillRenderer implements SkillRenderer {
     if (skill.parameters.length > 0) {
       lines.push("## Parameters");
       lines.push("");
+      lines.push("Prompt for all required parameters when this command is invoked.");
+      lines.push("");
       for (const param of skill.parameters) {
         const required = param.required ? "required" : "optional";
         lines.push(
@@ -174,8 +244,7 @@ export class CursorSkillRenderer implements SkillRenderer {
   }
 
   getFilename(skill: Skill): string {
-    const safeName = skill.name.replace(/[^a-z0-9-]/gi, "-");
-    return `${safeName}.mdc`;
+    return `${commandFileBaseName(skill)}.mdc`;
   }
 }
 
@@ -197,7 +266,7 @@ export class AiderSkillRenderer implements SkillRenderer {
     lines.push("");
 
     // Trigger
-    lines.push(`## Invocation`);
+    lines.push("## Invocation");
     lines.push("");
     lines.push(`Use \`${skill.trigger.command}\` to invoke this skill.`);
     lines.push("");
@@ -241,6 +310,9 @@ export class AiderSkillRenderer implements SkillRenderer {
  */
 export const skillRenderers: Record<string, SkillRenderer> = {
   "claude-code": new ClaudeCodeSkillRenderer(),
+  codex: new CodexSkillRenderer(),
+  opencode: new OpenCodeSkillRenderer(),
+  copilot: new CopilotSkillRenderer(),
   cursor: new CursorSkillRenderer(),
   aider: new AiderSkillRenderer(),
 };

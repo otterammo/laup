@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   AiderSkillRenderer,
   ClaudeCodeSkillRenderer,
+  CodexSkillRenderer,
+  CopilotSkillRenderer,
   CursorSkillRenderer,
   getSkillRenderer,
+  OpenCodeSkillRenderer,
   renderSkillToAllTools,
 } from "../skill-renderer.js";
 import type { Skill } from "../skill-schema.js";
@@ -57,11 +60,12 @@ describe("skill-renderer", () => {
       expect(output).toContain("**focus** `selection` (optional)");
       expect(output).toContain("You are a senior code reviewer");
       expect(output).toContain("{{language}}");
+      expect(output).toContain("Prompt for all required parameters when this command is invoked");
     });
 
-    it("generates correct filename", () => {
+    it("generates command-based filename", () => {
       const filename = renderer.getFilename(sampleSkill);
-      expect(filename).toBe("skill-code-review.md");
+      expect(filename).toBe("review.md");
     });
 
     it("handles skill without optional fields", () => {
@@ -93,6 +97,7 @@ describe("skill-renderer", () => {
       expect(output).toContain("# code-review");
       expect(output).toContain("**Trigger:** `/review`");
       expect(output).toContain("`{{language}}`");
+      expect(output).toContain("Prompt for all required parameters when this command is invoked");
     });
 
     it("includes cursor-specific overrides", () => {
@@ -112,9 +117,9 @@ describe("skill-renderer", () => {
       expect(output).toContain("alwaysApply: true");
     });
 
-    it("generates correct filename", () => {
+    it("generates command-based filename", () => {
       const filename = renderer.getFilename(sampleSkill);
-      expect(filename).toBe("code-review.mdc");
+      expect(filename).toBe("review.mdc");
     });
   });
 
@@ -136,9 +141,20 @@ describe("skill-renderer", () => {
     });
   });
 
+  describe("additional markdown renderers", () => {
+    it("generate command-based filenames", () => {
+      expect(new CodexSkillRenderer().getFilename(sampleSkill)).toBe("review.md");
+      expect(new OpenCodeSkillRenderer().getFilename(sampleSkill)).toBe("review.md");
+      expect(new CopilotSkillRenderer().getFilename(sampleSkill)).toBe("review.md");
+    });
+  });
+
   describe("getSkillRenderer", () => {
     it("returns renderer for known tool", () => {
       expect(getSkillRenderer("claude-code")).toBeInstanceOf(ClaudeCodeSkillRenderer);
+      expect(getSkillRenderer("codex")).toBeInstanceOf(CodexSkillRenderer);
+      expect(getSkillRenderer("opencode")).toBeInstanceOf(OpenCodeSkillRenderer);
+      expect(getSkillRenderer("copilot")).toBeInstanceOf(CopilotSkillRenderer);
       expect(getSkillRenderer("cursor")).toBeInstanceOf(CursorSkillRenderer);
       expect(getSkillRenderer("aider")).toBeInstanceOf(AiderSkillRenderer);
     });
@@ -152,8 +168,15 @@ describe("skill-renderer", () => {
     it("renders skill to all tools", () => {
       const results = renderSkillToAllTools(sampleSkill);
 
-      expect(results).toHaveLength(3);
-      expect(results.map((r) => r.toolId).sort()).toEqual(["aider", "claude-code", "cursor"]);
+      expect(results).toHaveLength(6);
+      expect(results.map((r) => r.toolId).sort()).toEqual([
+        "aider",
+        "claude-code",
+        "codex",
+        "copilot",
+        "cursor",
+        "opencode",
+      ]);
 
       for (const result of results) {
         expect(result.filename).toBeTruthy();

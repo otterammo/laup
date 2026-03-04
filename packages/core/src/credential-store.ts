@@ -4,79 +4,79 @@
  */
 
 import { z } from "zod";
+import type { AuditStorage } from "./audit-storage.js";
 import type { DbAdapter } from "./db-adapter.js";
 
 /**
  * Credential types.
  */
 export const CredentialTypeSchema = z.enum([
-  "api-key", // API keys
-  "oauth-token", // OAuth tokens
-  "password", // Passwords
-  "certificate", // Certificates
-  "ssh-key", // SSH keys
-  "webhook-secret", // Webhook secrets
-  "encryption-key", // Encryption keys
-  "other", // Other sensitive data
+  "api-key",
+  "oauth-token",
+  "password",
+  "certificate",
+  "ssh-key",
+  "webhook-secret",
+  "encryption-key",
+  "other",
 ]);
 
 export type CredentialType = z.infer<typeof CredentialTypeSchema>;
+
+export const SecretScopeKindSchema = z.enum(["global", "org", "team", "project", "user"]);
+export type SecretScopeKind = z.infer<typeof SecretScopeKindSchema>;
+
+export interface SecretScope {
+  kind: SecretScopeKind;
+  id?: string;
+}
+
+export interface CredentialAccessContext {
+  accessorId: string;
+  accessorType?: "user" | "service" | "agent";
+  scopes?: string[];
+}
+
+export interface CredentialAccessPolicy {
+  readers?: string[];
+  writers?: string[];
+  rotators?: string[];
+  allowedAccessorTypes?: Array<"user" | "service" | "agent">;
+  requiredScopes?: string[];
+  allowOwnerAccess?: boolean;
+}
 
 /**
  * Credential metadata.
  */
 export interface CredentialMetadata {
-  /** Human-readable name */
   name: string;
-
-  /** Description */
   description?: string;
-
-  /** Credential type */
   type: CredentialType;
-
-  /** Service/provider this credential is for */
   service?: string;
-
-  /** Owner (user or team ID) */
   ownerId: string;
-
-  /** Owner type */
   ownerType: "user" | "team" | "org";
-
-  /** Allowed scopes (project IDs, team IDs) */
   allowedScopes?: string[];
-
-  /** Expiration time (ISO 8601) */
+  scope?: SecretScope;
   expiresAt?: string;
-
-  /** Creation time */
   createdAt: string;
-
-  /** Last rotation time */
   rotatedAt?: string;
-
-  /** Last access time */
   lastAccessedAt?: string;
-
-  /** Tags for organization */
+  revokedAt?: string;
+  revokedBy?: string;
   tags?: string[];
+  status?: "active" | "revoked";
+  rotationPeriodDays?: number;
+  policy?: CredentialAccessPolicy;
 }
 
 /**
  * Stored credential (metadata + encrypted value).
  */
 export interface StoredCredential {
-  /** Unique credential ID */
   id: string;
-
-  /** Metadata */
   metadata: CredentialMetadata;
-
-  /** Encrypted credential value */
   encryptedValue: string;
-
-  /** Encryption version (for key rotation) */
   encryptionVersion: number;
 }
 
@@ -87,7 +87,7 @@ export interface CredentialAccess {
   credentialId: string;
   accessor: string;
   timestamp: string;
-  action: "read" | "write" | "delete" | "rotate";
+  action: "read" | "write" | "delete" | "rotate" | "revoke" | "policy-update";
   success: boolean;
   reason?: string;
 }
@@ -96,36 +96,23 @@ export interface CredentialAccess {
  * Credential query filters.
  */
 export interface CredentialQueryFilter {
-  /** Filter by owner */
   ownerId?: string;
-
-  /** Filter by type */
   type?: CredentialType;
-
-  /** Filter by service */
   service?: string;
-
-  /** Filter by tag */
   tag?: string;
-
-  /** Include expired */
   includeExpired?: boolean;
+  includeRevoked?: boolean;
+  scopeKind?: SecretScopeKind;
+  scopeId?: string;
 }
 
 /**
  * Encryption provider interface.
  */
 export interface EncryptionProvider {
-  /** Current encryption version */
   readonly version: number;
-
-  /** Encrypt a value */
   encrypt(plaintext: string): Promise<string>;
-
-  /** Decrypt a value */
   decrypt(ciphertext: string, version?: number): Promise<string>;
-
-  /** Check if value needs re-encryption (old version) */
   needsReencryption(version: number): boolean;
 }
 
@@ -148,80 +135,93 @@ export class TestEncryptionProvider implements EncryptionProvider {
   }
 }
 
-/**
- * Credential store interface.
- */
 export interface CredentialStore {
-  /**
-   * Initialize the store.
-   */
   init(): Promise<void>;
-
-  /**
-   * Store a credential.
-   */
   store(metadata: Omit<CredentialMetadata, "createdAt">, value: string): Promise<string>;
-
-  /**
-   * Retrieve a credential value.
-   */
-  get(id: string, accessor: string): Promise<string | null>;
-
-  /**
-   * Get credential metadata (without value).
-   */
+  get(id: string, accessor: string | CredentialAccessContext): Promise<string | null>;
   getMetadata(id: string): Promise<CredentialMetadata | null>;
-
-  /**
-   * List credentials matching filter.
-   */
   list(filter: CredentialQueryFilter): Promise<CredentialMetadata[]>;
-
-  /**
-   * Update a credential value.
-   */
-  update(id: string, value: string, accessor: string): Promise<void>;
-
-  /**
-   * Rotate a credential (update value and record rotation).
-   */
-  rotate(id: string, newValue: string, accessor: string): Promise<void>;
-
-  /**
-   * Delete a credential.
-   */
-  delete(id: string, accessor: string): Promise<void>;
-
-  /**
-   * Get access history for a credential.
-   */
+  update(id: string, value: string, accessor: string | CredentialAccessContext): Promise<void>;
+  rotate(id: string, newValue: string, accessor: string | CredentialAccessContext): Promise<void>;
+  revoke(id: string, accessor: string | CredentialAccessContext, reason?: string): Promise<void>;
+  setAccessPolicy(
+    id: string,
+    policy: CredentialAccessPolicy,
+    accessor: string | CredentialAccessContext,
+  ): Promise<void>;
+  delete(id: string, accessor: string | CredentialAccessContext): Promise<void>;
   getAccessHistory(id: string, limit?: number): Promise<CredentialAccess[]>;
-
-  /**
-   * Check if a credential is expired.
-   */
   isExpired(id: string): Promise<boolean>;
-
-  /**
-   * Get credentials that need rotation (older than maxAge).
-   */
   getStaleCredentials(maxAgeDays: number): Promise<CredentialMetadata[]>;
-
-  /**
-   * Re-encrypt credentials with new encryption version.
-   */
-  reencryptAll(accessor: string): Promise<number>;
+  reencryptAll(accessor: string | CredentialAccessContext): Promise<number>;
 }
 
-/**
- * In-memory credential store for testing.
- */
+function normalizeAccessor(accessor: string | CredentialAccessContext): CredentialAccessContext {
+  return typeof accessor === "string" ? { accessorId: accessor } : accessor;
+}
+
+function canAccess(
+  metadata: CredentialMetadata,
+  policy: CredentialAccessPolicy | undefined,
+  action: "read" | "write" | "rotate" | "revoke",
+  accessor: CredentialAccessContext,
+): { allowed: boolean; reason?: string } {
+  if (metadata.status === "revoked" && action !== "revoke") {
+    return { allowed: false, reason: "Credential revoked" };
+  }
+
+  const ownerAllowed = policy?.allowOwnerAccess ?? true;
+  if (ownerAllowed && accessor.accessorId === metadata.ownerId) {
+    return { allowed: true };
+  }
+
+  if (policy?.allowedAccessorTypes?.length && accessor.accessorType) {
+    if (!policy.allowedAccessorTypes.includes(accessor.accessorType)) {
+      return { allowed: false, reason: "Accessor type denied" };
+    }
+  }
+
+  if (policy?.requiredScopes?.length) {
+    const scopes = new Set(accessor.scopes ?? []);
+    const hasAllScopes = policy.requiredScopes.every((scope) => scopes.has(scope));
+    if (!hasAllScopes) {
+      return { allowed: false, reason: "Required scopes missing" };
+    }
+  }
+
+  const acl =
+    action === "read"
+      ? policy?.readers
+      : action === "write"
+        ? policy?.writers
+        : action === "rotate"
+          ? policy?.rotators
+          : policy?.rotators;
+
+  if (acl?.length && !acl.includes(accessor.accessorId)) {
+    return { allowed: false, reason: `Accessor not allowed for ${action}` };
+  }
+
+  if (metadata.allowedScopes?.length && accessor.scopes?.length) {
+    const allowed = new Set(metadata.allowedScopes);
+    const matches = accessor.scopes.some((scope) => allowed.has(scope));
+    if (!matches) {
+      return { allowed: false, reason: "Scope not allowed" };
+    }
+  }
+
+  return { allowed: true };
+}
+
 export class InMemoryCredentialStore implements CredentialStore {
   private credentials: Map<string, StoredCredential> = new Map();
   private accessLog: CredentialAccess[] = [];
   private nextId = 1;
 
-  constructor(private encryption: EncryptionProvider = new TestEncryptionProvider()) {}
+  constructor(
+    private encryption: EncryptionProvider = new TestEncryptionProvider(),
+    private auditStorage?: AuditStorage,
+  ) {}
 
   async init(): Promise<void> {}
 
@@ -229,29 +229,48 @@ export class InMemoryCredentialStore implements CredentialStore {
     const id = `cred_${this.nextId++}`;
     const encrypted = await this.encryption.encrypt(value);
 
+    const normalizedMetadata: CredentialMetadata = {
+      ...metadata,
+      createdAt: new Date().toISOString(),
+      status: metadata.status ?? "active",
+    };
+
     this.credentials.set(id, {
       id,
-      metadata: {
-        ...metadata,
-        createdAt: new Date().toISOString(),
-      },
+      metadata: normalizedMetadata,
       encryptedValue: encrypted,
       encryptionVersion: this.encryption.version,
+    });
+
+    await this.audit("credential.create", normalizedMetadata.ownerId, id, "info", {
+      ownerId: normalizedMetadata.ownerId,
+      type: normalizedMetadata.type,
+      scope: normalizedMetadata.scope,
     });
 
     return id;
   }
 
-  async get(id: string, accessor: string): Promise<string | null> {
+  async get(id: string, accessor: string | CredentialAccessContext): Promise<string | null> {
+    const access = normalizeAccessor(accessor);
     const cred = this.credentials.get(id);
 
-    this.logAccess(id, accessor, "read", !!cred);
+    if (!cred) {
+      this.logAccess(id, access.accessorId, "read", false, "Credential not found");
+      return null;
+    }
 
-    if (!cred) return null;
+    const decision = canAccess(cred.metadata, cred.metadata.policy, "read", access);
+    this.logAccess(id, access.accessorId, "read", decision.allowed, decision.reason);
+    if (!decision.allowed) {
+      await this.audit("credential.read.denied", access.accessorId, id, "warning", {
+        reason: decision.reason,
+      });
+      return null;
+    }
 
-    // Update last accessed
     cred.metadata.lastAccessedAt = new Date().toISOString();
-
+    await this.audit("credential.read", access.accessorId, id, "info");
     return this.encryption.decrypt(cred.encryptedValue, cred.encryptionVersion);
   }
 
@@ -267,46 +286,123 @@ export class InMemoryCredentialStore implements CredentialStore {
         if (filter.type && cred.metadata.type !== filter.type) return false;
         if (filter.service && cred.metadata.service !== filter.service) return false;
         if (filter.tag && !cred.metadata.tags?.includes(filter.tag)) return false;
-
+        if (!filter.includeRevoked && cred.metadata.status === "revoked") return false;
+        if (filter.scopeKind && cred.metadata.scope?.kind !== filter.scopeKind) return false;
+        if (filter.scopeId && cred.metadata.scope?.id !== filter.scopeId) return false;
         if (!filter.includeExpired && cred.metadata.expiresAt) {
           if (new Date(cred.metadata.expiresAt) < new Date()) return false;
         }
-
         return true;
       })
       .map((cred) => cred.metadata);
   }
 
-  async update(id: string, value: string, accessor: string): Promise<void> {
+  async update(
+    id: string,
+    value: string,
+    accessor: string | CredentialAccessContext,
+  ): Promise<void> {
+    const access = normalizeAccessor(accessor);
     const cred = this.credentials.get(id);
     if (!cred) {
-      this.logAccess(id, accessor, "write", false, "Credential not found");
+      this.logAccess(id, access.accessorId, "write", false, "Credential not found");
       throw new Error(`Credential ${id} not found`);
+    }
+
+    const decision = canAccess(cred.metadata, cred.metadata.policy, "write", access);
+    if (!decision.allowed) {
+      this.logAccess(id, access.accessorId, "write", false, decision.reason);
+      throw new Error(decision.reason ?? "Access denied");
     }
 
     cred.encryptedValue = await this.encryption.encrypt(value);
     cred.encryptionVersion = this.encryption.version;
-
-    this.logAccess(id, accessor, "write", true);
+    this.logAccess(id, access.accessorId, "write", true);
+    await this.audit("credential.update", access.accessorId, id, "info");
   }
 
-  async rotate(id: string, newValue: string, accessor: string): Promise<void> {
+  async rotate(
+    id: string,
+    newValue: string,
+    accessor: string | CredentialAccessContext,
+  ): Promise<void> {
+    const access = normalizeAccessor(accessor);
     const cred = this.credentials.get(id);
     if (!cred) {
-      this.logAccess(id, accessor, "rotate", false, "Credential not found");
+      this.logAccess(id, access.accessorId, "rotate", false, "Credential not found");
       throw new Error(`Credential ${id} not found`);
+    }
+
+    const decision = canAccess(cred.metadata, cred.metadata.policy, "rotate", access);
+    if (!decision.allowed) {
+      this.logAccess(id, access.accessorId, "rotate", false, decision.reason);
+      throw new Error(decision.reason ?? "Access denied");
     }
 
     cred.encryptedValue = await this.encryption.encrypt(newValue);
     cred.encryptionVersion = this.encryption.version;
     cred.metadata.rotatedAt = new Date().toISOString();
+    cred.metadata.status = "active";
 
-    this.logAccess(id, accessor, "rotate", true);
+    this.logAccess(id, access.accessorId, "rotate", true);
+    await this.audit("credential.rotate", access.accessorId, id, "info");
   }
 
-  async delete(id: string, accessor: string): Promise<void> {
+  async revoke(
+    id: string,
+    accessor: string | CredentialAccessContext,
+    reason?: string,
+  ): Promise<void> {
+    const access = normalizeAccessor(accessor);
+    const cred = this.credentials.get(id);
+    if (!cred) {
+      this.logAccess(id, access.accessorId, "revoke", false, "Credential not found");
+      throw new Error(`Credential ${id} not found`);
+    }
+
+    const decision = canAccess(cred.metadata, cred.metadata.policy, "revoke", access);
+    if (!decision.allowed) {
+      this.logAccess(id, access.accessorId, "revoke", false, decision.reason);
+      throw new Error(decision.reason ?? "Access denied");
+    }
+
+    cred.metadata.status = "revoked";
+    cred.metadata.revokedAt = new Date().toISOString();
+    cred.metadata.revokedBy = access.accessorId;
+
+    this.logAccess(id, access.accessorId, "revoke", true, reason);
+    await this.audit("credential.revoke", access.accessorId, id, "warning", { reason });
+  }
+
+  async setAccessPolicy(
+    id: string,
+    policy: CredentialAccessPolicy,
+    accessor: string | CredentialAccessContext,
+  ): Promise<void> {
+    const access = normalizeAccessor(accessor);
+    const cred = this.credentials.get(id);
+    if (!cred) {
+      this.logAccess(id, access.accessorId, "policy-update", false, "Credential not found");
+      throw new Error(`Credential ${id} not found`);
+    }
+
+    if (access.accessorId !== cred.metadata.ownerId) {
+      this.logAccess(id, access.accessorId, "policy-update", false, "Only owner can update policy");
+      throw new Error("Only owner can update access policy");
+    }
+
+    cred.metadata.policy = policy;
+    this.logAccess(id, access.accessorId, "policy-update", true);
+    await this.audit("credential.policy.update", access.accessorId, id, "info", { policy });
+  }
+
+  async delete(id: string, accessor: string | CredentialAccessContext): Promise<void> {
+    const access = normalizeAccessor(accessor);
     const existed = this.credentials.delete(id);
-    this.logAccess(id, accessor, "delete", existed);
+    this.logAccess(id, access.accessorId, "delete", existed);
+    if (existed) {
+      await this.audit("credential.delete", access.accessorId, id, "warning");
+    }
   }
 
   async getAccessHistory(id: string, limit = 100): Promise<CredentialAccess[]> {
@@ -325,13 +421,25 @@ export class InMemoryCredentialStore implements CredentialStore {
 
     return Array.from(this.credentials.values())
       .filter((cred) => {
+        if (cred.metadata.status === "revoked") return false;
+
         const lastRotated = cred.metadata.rotatedAt ?? cred.metadata.createdAt;
-        return new Date(lastRotated) < cutoff;
+        if (new Date(lastRotated) < cutoff) return true;
+
+        const rotationPeriodDays = cred.metadata.rotationPeriodDays;
+        if (rotationPeriodDays) {
+          const staleByPolicy = new Date(lastRotated);
+          staleByPolicy.setDate(staleByPolicy.getDate() + rotationPeriodDays);
+          return staleByPolicy < new Date();
+        }
+
+        return false;
       })
       .map((cred) => cred.metadata);
   }
 
-  async reencryptAll(accessor: string): Promise<number> {
+  async reencryptAll(accessor: string | CredentialAccessContext): Promise<number> {
+    const access = normalizeAccessor(accessor);
     let count = 0;
 
     for (const cred of this.credentials.values()) {
@@ -343,8 +451,12 @@ export class InMemoryCredentialStore implements CredentialStore {
         cred.encryptedValue = await this.encryption.encrypt(plaintext);
         cred.encryptionVersion = this.encryption.version;
         count++;
-        this.logAccess(cred.id, accessor, "write", true, "Re-encryption");
+        this.logAccess(cred.id, access.accessorId, "write", true, "Re-encryption");
       }
+    }
+
+    if (count > 0) {
+      await this.audit("credential.reencrypt", access.accessorId, "*", "info", { count });
     }
 
     return count;
@@ -363,9 +475,29 @@ export class InMemoryCredentialStore implements CredentialStore {
       timestamp: new Date().toISOString(),
       action,
       success,
+      ...(reason ? { reason } : {}),
     };
-    if (reason) entry.reason = reason;
     this.accessLog.push(entry);
+  }
+
+  private async audit(
+    action: string,
+    actor: string,
+    targetId: string,
+    severity: "info" | "warning" | "critical",
+    metadata?: Record<string, unknown>,
+  ): Promise<void> {
+    if (!this.auditStorage) return;
+
+    await this.auditStorage.append({
+      category: "security",
+      action,
+      actor,
+      targetId,
+      targetType: "credential",
+      severity,
+      ...(metadata ? { metadata } : {}),
+    });
   }
 }
 
@@ -376,6 +508,7 @@ export class SqlCredentialStore implements CredentialStore {
   constructor(
     private db: DbAdapter,
     private encryption: EncryptionProvider = new TestEncryptionProvider(),
+    private auditStorage?: AuditStorage,
   ) {}
 
   async init(): Promise<void> {
@@ -389,10 +522,17 @@ export class SqlCredentialStore implements CredentialStore {
         owner_id TEXT NOT NULL,
         owner_type TEXT NOT NULL,
         allowed_scopes TEXT,
+        scope_kind TEXT,
+        scope_id TEXT,
         expires_at TEXT,
         created_at TEXT NOT NULL,
         rotated_at TEXT,
         last_accessed_at TEXT,
+        revoked_at TEXT,
+        revoked_by TEXT,
+        status TEXT,
+        rotation_period_days INTEGER,
+        access_policy TEXT,
         tags TEXT,
         encrypted_value TEXT NOT NULL,
         encryption_version INTEGER NOT NULL
@@ -423,8 +563,8 @@ export class SqlCredentialStore implements CredentialStore {
     const createdAt = new Date().toISOString();
 
     await this.db.execute(
-      `INSERT INTO credentials (id, name, description, type, service, owner_id, owner_type, allowed_scopes, expires_at, created_at, tags, encrypted_value, encryption_version)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO credentials (id, name, description, type, service, owner_id, owner_type, allowed_scopes, scope_kind, scope_id, expires_at, created_at, rotated_at, last_accessed_at, revoked_at, revoked_by, status, rotation_period_days, access_policy, tags, encrypted_value, encryption_version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         metadata.name,
@@ -434,95 +574,233 @@ export class SqlCredentialStore implements CredentialStore {
         metadata.ownerId,
         metadata.ownerType,
         metadata.allowedScopes ? JSON.stringify(metadata.allowedScopes) : null,
+        metadata.scope?.kind ?? null,
+        metadata.scope?.id ?? null,
         metadata.expiresAt ?? null,
         createdAt,
+        metadata.rotatedAt ?? null,
+        metadata.lastAccessedAt ?? null,
+        metadata.revokedAt ?? null,
+        metadata.revokedBy ?? null,
+        metadata.status ?? "active",
+        metadata.rotationPeriodDays ?? null,
+        metadata.policy ? JSON.stringify(metadata.policy) : null,
         metadata.tags ? JSON.stringify(metadata.tags) : null,
         encrypted,
         this.encryption.version,
       ],
     );
 
+    await this.audit("credential.create", metadata.ownerId, id, "info");
     return id;
   }
 
-  async get(id: string, accessor: string): Promise<string | null> {
-    const row = await this.db.queryOne<{ encrypted_value: string; encryption_version: number }>(
-      `SELECT encrypted_value, encryption_version FROM credentials WHERE id = ?`,
+  async get(id: string, accessor: string | CredentialAccessContext): Promise<string | null> {
+    const access = normalizeAccessor(accessor);
+    const row = await this.db.queryOne<Record<string, unknown>>(
+      `SELECT encrypted_value, encryption_version, owner_id, owner_type, allowed_scopes, scope_kind, scope_id, status, access_policy, expires_at FROM credentials WHERE id = ?`,
       [id],
     );
 
-    await this.logAccess(id, accessor, "read", !!row);
+    if (!row) {
+      await this.logAccess(id, access.accessorId, "read", false, "Credential not found");
+      return null;
+    }
 
-    if (!row) return null;
+    const metadata = this.rowToMetadata(row);
+    const decision = canAccess(metadata, metadata.policy, "read", access);
+    await this.logAccess(id, access.accessorId, "read", decision.allowed, decision.reason);
+    if (!decision.allowed) {
+      await this.audit("credential.read.denied", access.accessorId, id, "warning", {
+        reason: decision.reason,
+      });
+      return null;
+    }
 
     await this.db.execute(`UPDATE credentials SET last_accessed_at = ? WHERE id = ?`, [
       new Date().toISOString(),
       id,
     ]);
 
-    return this.encryption.decrypt(row.encrypted_value, row.encryption_version);
+    await this.audit("credential.read", access.accessorId, id, "info");
+    return this.encryption.decrypt(
+      row["encrypted_value"] as string,
+      row["encryption_version"] as number,
+    );
   }
 
   async getMetadata(id: string): Promise<CredentialMetadata | null> {
     const row = await this.db.queryOne<Record<string, unknown>>(
-      `SELECT name, description, type, service, owner_id, owner_type, allowed_scopes, expires_at, created_at, rotated_at, last_accessed_at, tags FROM credentials WHERE id = ?`,
+      `SELECT name, description, type, service, owner_id, owner_type, allowed_scopes, scope_kind, scope_id, expires_at, created_at, rotated_at, last_accessed_at, revoked_at, revoked_by, status, rotation_period_days, access_policy, tags FROM credentials WHERE id = ?`,
       [id],
     );
 
     if (!row) return null;
-
     return this.rowToMetadata(row);
   }
 
-  async list(_filter: CredentialQueryFilter): Promise<CredentialMetadata[]> {
-    // Simplified - real implementation would build WHERE clause
+  async list(filter: CredentialQueryFilter): Promise<CredentialMetadata[]> {
     const result = await this.db.query<Record<string, unknown>>(
-      `SELECT name, description, type, service, owner_id, owner_type, allowed_scopes, expires_at, created_at, rotated_at, last_accessed_at, tags FROM credentials`,
+      `SELECT name, description, type, service, owner_id, owner_type, allowed_scopes, scope_kind, scope_id, expires_at, created_at, rotated_at, last_accessed_at, revoked_at, revoked_by, status, rotation_period_days, access_policy, tags FROM credentials`,
     );
 
-    return result.rows.map((row) => this.rowToMetadata(row));
+    const all = result.rows.map((row) => this.rowToMetadata(row));
+    return all.filter((meta) => {
+      if (filter.ownerId && meta.ownerId !== filter.ownerId) return false;
+      if (filter.type && meta.type !== filter.type) return false;
+      if (filter.service && meta.service !== filter.service) return false;
+      if (filter.tag && !meta.tags?.includes(filter.tag)) return false;
+      if (!filter.includeExpired && meta.expiresAt && new Date(meta.expiresAt) < new Date())
+        return false;
+      if (!filter.includeRevoked && meta.status === "revoked") return false;
+      if (filter.scopeKind && meta.scope?.kind !== filter.scopeKind) return false;
+      if (filter.scopeId && meta.scope?.id !== filter.scopeId) return false;
+      return true;
+    });
   }
 
-  async update(id: string, value: string, accessor: string): Promise<void> {
+  async update(
+    id: string,
+    value: string,
+    accessor: string | CredentialAccessContext,
+  ): Promise<void> {
+    const access = normalizeAccessor(accessor);
+    const meta = await this.getMetadata(id);
+    if (!meta) {
+      await this.logAccess(id, access.accessorId, "write", false, "Credential not found");
+      throw new Error(`Credential ${id} not found`);
+    }
+
+    const decision = canAccess(meta, meta.policy, "write", access);
+    if (!decision.allowed) {
+      await this.logAccess(id, access.accessorId, "write", false, decision.reason);
+      throw new Error(decision.reason ?? "Access denied");
+    }
+
     const encrypted = await this.encryption.encrypt(value);
-    const result = await this.db.execute(
+    await this.db.execute(
       `UPDATE credentials SET encrypted_value = ?, encryption_version = ? WHERE id = ?`,
       [encrypted, this.encryption.version, id],
     );
-
-    await this.logAccess(id, accessor, "write", result > 0);
-
-    if (result === 0) {
-      throw new Error(`Credential ${id} not found`);
-    }
+    await this.logAccess(id, access.accessorId, "write", true);
+    await this.audit("credential.update", access.accessorId, id, "info");
   }
 
-  async rotate(id: string, newValue: string, accessor: string): Promise<void> {
+  async rotate(
+    id: string,
+    newValue: string,
+    accessor: string | CredentialAccessContext,
+  ): Promise<void> {
+    const access = normalizeAccessor(accessor);
+    const meta = await this.getMetadata(id);
+    if (!meta) {
+      await this.logAccess(id, access.accessorId, "rotate", false, "Credential not found");
+      throw new Error(`Credential ${id} not found`);
+    }
+
+    const decision = canAccess(meta, meta.policy, "rotate", access);
+    if (!decision.allowed) {
+      await this.logAccess(id, access.accessorId, "rotate", false, decision.reason);
+      throw new Error(decision.reason ?? "Access denied");
+    }
+
     const encrypted = await this.encryption.encrypt(newValue);
     const now = new Date().toISOString();
-    const result = await this.db.execute(
-      `UPDATE credentials SET encrypted_value = ?, encryption_version = ?, rotated_at = ? WHERE id = ?`,
+    await this.db.execute(
+      `UPDATE credentials SET encrypted_value = ?, encryption_version = ?, rotated_at = ?, status = 'active' WHERE id = ?`,
       [encrypted, this.encryption.version, now, id],
     );
-
-    await this.logAccess(id, accessor, "rotate", result > 0);
-
-    if (result === 0) {
-      throw new Error(`Credential ${id} not found`);
-    }
+    await this.logAccess(id, access.accessorId, "rotate", true);
+    await this.audit("credential.rotate", access.accessorId, id, "info");
   }
 
-  async delete(id: string, accessor: string): Promise<void> {
+  async revoke(
+    id: string,
+    accessor: string | CredentialAccessContext,
+    reason?: string,
+  ): Promise<void> {
+    const access = normalizeAccessor(accessor);
+    const meta = await this.getMetadata(id);
+    if (!meta) {
+      await this.logAccess(id, access.accessorId, "revoke", false, "Credential not found");
+      throw new Error(`Credential ${id} not found`);
+    }
+
+    const decision = canAccess(meta, meta.policy, "revoke", access);
+    if (!decision.allowed) {
+      await this.logAccess(id, access.accessorId, "revoke", false, decision.reason);
+      throw new Error(decision.reason ?? "Access denied");
+    }
+
+    await this.db.execute(
+      `UPDATE credentials SET status = 'revoked', revoked_at = ?, revoked_by = ? WHERE id = ?`,
+      [new Date().toISOString(), access.accessorId, id],
+    );
+    await this.logAccess(id, access.accessorId, "revoke", true, reason);
+    await this.audit("credential.revoke", access.accessorId, id, "warning", { reason });
+  }
+
+  async setAccessPolicy(
+    id: string,
+    policy: CredentialAccessPolicy,
+    accessor: string | CredentialAccessContext,
+  ): Promise<void> {
+    const access = normalizeAccessor(accessor);
+    const meta = await this.getMetadata(id);
+    if (!meta) {
+      await this.logAccess(id, access.accessorId, "policy-update", false, "Credential not found");
+      throw new Error(`Credential ${id} not found`);
+    }
+
+    if (access.accessorId !== meta.ownerId) {
+      await this.logAccess(
+        id,
+        access.accessorId,
+        "policy-update",
+        false,
+        "Only owner can update policy",
+      );
+      throw new Error("Only owner can update access policy");
+    }
+
+    await this.db.execute(`UPDATE credentials SET access_policy = ? WHERE id = ?`, [
+      JSON.stringify(policy),
+      id,
+    ]);
+    await this.logAccess(id, access.accessorId, "policy-update", true);
+    await this.audit("credential.policy.update", access.accessorId, id, "info", { policy });
+  }
+
+  async delete(id: string, accessor: string | CredentialAccessContext): Promise<void> {
+    const access = normalizeAccessor(accessor);
     const result = await this.db.execute(`DELETE FROM credentials WHERE id = ?`, [id]);
-    await this.logAccess(id, accessor, "delete", result > 0);
+    await this.logAccess(id, access.accessorId, "delete", result > 0);
+    if (result > 0) {
+      await this.audit("credential.delete", access.accessorId, id, "warning");
+    }
   }
 
   async getAccessHistory(id: string, limit = 100): Promise<CredentialAccess[]> {
-    const result = await this.db.query<CredentialAccess>(
+    const result = await this.db.query<{
+      credential_id: string;
+      accessor: string;
+      timestamp: string;
+      action: CredentialAccess["action"];
+      success: number | boolean;
+      reason: string | null;
+    }>(
       `SELECT credential_id, accessor, timestamp, action, success, reason FROM credential_access_log WHERE credential_id = ? ORDER BY timestamp DESC LIMIT ?`,
       [id, limit],
     );
-    return result.rows;
+
+    return result.rows.map((row) => ({
+      credentialId: row.credential_id,
+      accessor: row.accessor,
+      timestamp: row.timestamp,
+      action: row.action,
+      success: Boolean(row.success),
+      ...(row.reason ? { reason: row.reason } : {}),
+    }));
   }
 
   async isExpired(id: string): Promise<boolean> {
@@ -534,40 +812,93 @@ export class SqlCredentialStore implements CredentialStore {
     return new Date(row.expires_at) < new Date();
   }
 
-  async getStaleCredentials(_maxAgeDays: number): Promise<CredentialMetadata[]> {
-    // Simplified
-    return [];
+  async getStaleCredentials(maxAgeDays: number): Promise<CredentialMetadata[]> {
+    const all = await this.list({ includeExpired: true, includeRevoked: false });
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - maxAgeDays);
+
+    return all.filter((meta) => {
+      const lastRotated = meta.rotatedAt ?? meta.createdAt;
+      if (new Date(lastRotated) < cutoff) return true;
+
+      const rotationPeriodDays = meta.rotationPeriodDays;
+      if (rotationPeriodDays) {
+        const staleByPolicy = new Date(lastRotated);
+        staleByPolicy.setDate(staleByPolicy.getDate() + rotationPeriodDays);
+        return staleByPolicy < new Date();
+      }
+
+      return false;
+    });
   }
 
-  async reencryptAll(_accessor: string): Promise<number> {
-    // Would iterate and re-encrypt
-    return 0;
+  async reencryptAll(accessor: string | CredentialAccessContext): Promise<number> {
+    const access = normalizeAccessor(accessor);
+    const rows = await this.db.query<{
+      id: string;
+      encrypted_value: string;
+      encryption_version: number;
+    }>(`SELECT id, encrypted_value, encryption_version FROM credentials`);
+
+    let count = 0;
+    for (const row of rows.rows) {
+      if (!this.encryption.needsReencryption(row.encryption_version)) continue;
+
+      const plaintext = await this.encryption.decrypt(row.encrypted_value, row.encryption_version);
+      const encrypted = await this.encryption.encrypt(plaintext);
+      await this.db.execute(
+        `UPDATE credentials SET encrypted_value = ?, encryption_version = ? WHERE id = ?`,
+        [encrypted, this.encryption.version, row.id],
+      );
+      count++;
+      await this.logAccess(row.id, access.accessorId, "write", true, "Re-encryption");
+    }
+
+    if (count > 0) {
+      await this.audit("credential.reencrypt", access.accessorId, "*", "info", { count });
+    }
+
+    return count;
   }
 
   private rowToMetadata(row: Record<string, unknown>): CredentialMetadata {
-    const meta: CredentialMetadata = {
-      name: row["name"] as string,
-      type: row["type"] as CredentialType,
-      ownerId: row["owner_id"] as string,
-      ownerType: row["owner_type"] as "user" | "team" | "org",
-      createdAt: row["created_at"] as string,
+    const scopeKind = row["scope_kind"] as SecretScopeKind | null | undefined;
+    const scopeId = row["scope_id"] as string | null | undefined;
+
+    const metadata: CredentialMetadata = {
+      name: (row["name"] as string) ?? "",
+      type: (row["type"] as CredentialType) ?? "other",
+      ownerId: (row["owner_id"] as string) ?? "",
+      ownerType: (row["owner_type"] as "user" | "team" | "org") ?? "user",
+      createdAt: (row["created_at"] as string) ?? new Date().toISOString(),
+      ...(scopeKind
+        ? { scope: scopeId ? { kind: scopeKind, id: scopeId } : { kind: scopeKind } }
+        : {}),
+      ...(row["status"] ? { status: row["status"] as "active" | "revoked" } : {}),
     };
 
-    if (row["description"]) meta.description = row["description"] as string;
-    if (row["service"]) meta.service = row["service"] as string;
-    if (row["allowed_scopes"]) meta.allowedScopes = JSON.parse(row["allowed_scopes"] as string);
-    if (row["expires_at"]) meta.expiresAt = row["expires_at"] as string;
-    if (row["rotated_at"]) meta.rotatedAt = row["rotated_at"] as string;
-    if (row["last_accessed_at"]) meta.lastAccessedAt = row["last_accessed_at"] as string;
-    if (row["tags"]) meta.tags = JSON.parse(row["tags"] as string);
+    if (row["description"]) metadata.description = row["description"] as string;
+    if (row["service"]) metadata.service = row["service"] as string;
+    if (row["allowed_scopes"])
+      metadata.allowedScopes = JSON.parse(row["allowed_scopes"] as string) as string[];
+    if (row["expires_at"]) metadata.expiresAt = row["expires_at"] as string;
+    if (row["rotated_at"]) metadata.rotatedAt = row["rotated_at"] as string;
+    if (row["last_accessed_at"]) metadata.lastAccessedAt = row["last_accessed_at"] as string;
+    if (row["revoked_at"]) metadata.revokedAt = row["revoked_at"] as string;
+    if (row["revoked_by"]) metadata.revokedBy = row["revoked_by"] as string;
+    if (row["rotation_period_days"])
+      metadata.rotationPeriodDays = Number(row["rotation_period_days"]);
+    if (row["access_policy"])
+      metadata.policy = JSON.parse(row["access_policy"] as string) as CredentialAccessPolicy;
+    if (row["tags"]) metadata.tags = JSON.parse(row["tags"] as string) as string[];
 
-    return meta;
+    return metadata;
   }
 
   private async logAccess(
     credentialId: string,
     accessor: string,
-    action: string,
+    action: CredentialAccess["action"],
     success: boolean,
     reason?: string,
   ): Promise<void> {
@@ -577,14 +908,32 @@ export class SqlCredentialStore implements CredentialStore {
       [credentialId, accessor, new Date().toISOString(), action, success ? 1 : 0, reason ?? null],
     );
   }
+
+  private async audit(
+    action: string,
+    actor: string,
+    targetId: string,
+    severity: "info" | "warning" | "critical",
+    metadata?: Record<string, unknown>,
+  ): Promise<void> {
+    if (!this.auditStorage) return;
+
+    await this.auditStorage.append({
+      category: "security",
+      action,
+      actor,
+      targetId,
+      targetType: "credential",
+      severity,
+      ...(metadata ? { metadata } : {}),
+    });
+  }
 }
 
-/**
- * Create a credential store with the given database adapter.
- */
 export function createCredentialStore(
   db: DbAdapter,
   encryption?: EncryptionProvider,
+  auditStorage?: AuditStorage,
 ): CredentialStore {
-  return new SqlCredentialStore(db, encryption);
+  return new SqlCredentialStore(db, encryption, auditStorage);
 }

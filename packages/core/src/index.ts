@@ -54,6 +54,18 @@ export {
   TieredCache,
 } from "./cache.js";
 export type {
+  FallbackPricing,
+  LlmCostBreakdown,
+  MissingPriceStrategy,
+  UsageCostTotals,
+  UsageEventCost,
+} from "./cost-conversion.js";
+export {
+  CostConversionService,
+  createCostConversionService,
+  PriceUnavailableError,
+} from "./cost-conversion.js";
+export type {
   AttributionAggregate,
   AttributionCombinationAggregate,
   AttributionDimension,
@@ -81,6 +93,7 @@ export {
   CostCapSchema,
   CostSummarySchema,
   calculateLlmCost,
+  getAttributionValue,
   isCostCapExceeded,
   LlmUsageSchema,
   McpInvocationUsageSchema,

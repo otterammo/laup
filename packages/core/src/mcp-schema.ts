@@ -149,6 +149,16 @@ export type McpServer = z.infer<typeof McpServerSchema>;
 /**
  * MCP server health state (MCP-003).
  */
+export interface McpLastCheckStatus {
+  checkedAt: number;
+  durationMs: number;
+  success: boolean;
+  timedOut: boolean;
+  retries: number;
+  message?: string;
+  error?: string;
+}
+
 export interface McpHealthState {
   serverId: string;
   status: McpHealthStatus;
@@ -157,6 +167,7 @@ export interface McpHealthState {
   lastFailure?: number;
   consecutiveFailures: number;
   message?: string;
+  lastCheckStatus?: McpLastCheckStatus;
 }
 
 /**

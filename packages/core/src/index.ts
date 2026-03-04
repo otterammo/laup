@@ -200,6 +200,14 @@ export {
   MemoryJobQueue,
 } from "./job-queue.js";
 export type {
+  McpHealthMonitorConfig,
+  McpHealthMonitorHooks,
+  McpHealthTransition,
+  McpLivenessChecker,
+  McpServerRegistryLike,
+} from "./mcp-health-monitor.js";
+export { McpHealthMonitorService } from "./mcp-health-monitor.js";
+export type {
   McpPropagationOptions,
   McpPropagationReport,
   McpPropagationTarget,
@@ -217,6 +225,7 @@ export type {
   McpHealthCheck,
   McpHealthState,
   McpHealthStatus,
+  McpLastCheckStatus,
   McpScope,
   McpServer,
   McpTransport,

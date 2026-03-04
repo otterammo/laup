@@ -61,41 +61,35 @@ export interface CursorSerializerInput extends BaseSerializerInput {
   };
 }
 
-function buildBasePacket(input: BaseSerializerInput): Omit<ContextPacket, "state"> {
+function buildBasePacket(input: BaseSerializerInput): ContextPacket {
   return {
-    id: input.id,
-    schemaVersion: "1.0",
-    sourceAgent: input.sourceAgent,
-    ...(input.targetAgent ? { targetAgent: input.targetAgent } : {}),
-    mode: input.mode ?? "sync",
-    routing: input.routing ?? "direct",
-    timeoutSeconds: input.timeoutSeconds ?? 60,
-    ...(input.task
-      ? {
-          conversation: {
-            messages: [],
-            task: input.task,
-          },
-        }
-      : {}),
-    ...(input.requiredCapabilities
-      ? {
-          requiredCapabilities: input.requiredCapabilities,
-        }
-      : {}),
-    compressed: false,
-    metadata: {
-      createdAt: input.createdAt,
+    packetId: input.id,
+    schemaVersion: "1.0.0",
+    sendingTool: input.sourceAgent,
+    receivingTool: input.targetAgent ?? "unknown",
+    task: input.task ? { description: input.task } : {},
+    workingContext: {
+      mode: input.mode ?? "sync",
+      routing: input.routing ?? "direct",
+      timeoutSeconds: input.timeoutSeconds ?? 60,
       priority: input.priority ?? "normal",
       ...(input.tags ? { tags: input.tags } : {}),
     },
+    memoryRefs: [],
+    conversationSummary: input.task ?? "",
+    constraints: input.requiredCapabilities ?? [],
+    permissionPolicy: {},
+    timestamp: input.createdAt,
+    compressed: false,
   };
 }
 
 export function serializeClaudeCodeContext(input: ClaudeCodeSerializerInput): ContextPacket {
+  const basePacket = buildBasePacket(input);
   const packet: ContextPacket = {
-    ...buildBasePacket(input),
-    state: {
+    ...basePacket,
+    workingContext: {
+      ...basePacket.workingContext,
       claudeCode: {
         taskContext: input.native.taskContext,
         activeFiles: input.native.activeFiles,
@@ -108,9 +102,11 @@ export function serializeClaudeCodeContext(input: ClaudeCodeSerializerInput): Co
 }
 
 export function serializeCursorContext(input: CursorSerializerInput): ContextPacket {
+  const basePacket = buildBasePacket(input);
   const packet: ContextPacket = {
-    ...buildBasePacket(input),
-    state: {
+    ...basePacket,
+    workingContext: {
+      ...basePacket.workingContext,
       cursor: {
         notepads: input.native.notepads,
         editor: input.native.editor,

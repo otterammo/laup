@@ -29,20 +29,19 @@ describe("context-packet-serializers (HAND-002)", () => {
     expect(packet).toMatchInlineSnapshot(`
       {
         "compressed": false,
-        "conversation": {
-          "messages": [],
-          "task": "Finish HAND-002",
+        "constraints": [],
+        "conversationSummary": "Finish HAND-002",
+        "memoryRefs": [],
+        "packetId": "packet-claude-1",
+        "permissionPolicy": {},
+        "receivingTool": "cursor",
+        "schemaVersion": "1.0.0",
+        "sendingTool": "claude-code",
+        "task": {
+          "description": "Finish HAND-002",
         },
-        "id": "packet-claude-1",
-        "metadata": {
-          "createdAt": "2026-03-04T23:10:00.000Z",
-          "priority": "normal",
-        },
-        "mode": "sync",
-        "routing": "direct",
-        "schemaVersion": "1.0",
-        "sourceAgent": "claude-code",
-        "state": {
+        "timestamp": "2026-03-04T23:10:00.000Z",
+        "workingContext": {
           "claudeCode": {
             "activeFiles": [
               "packages/core/src/handoff-schema.ts",
@@ -57,9 +56,11 @@ describe("context-packet-serializers (HAND-002)", () => {
               "taskId": "task-42",
             },
           },
+          "mode": "sync",
+          "priority": "normal",
+          "routing": "direct",
+          "timeoutSeconds": 60,
         },
-        "targetAgent": "cursor",
-        "timeoutSeconds": 60,
       }
     `);
   });
@@ -99,20 +100,20 @@ describe("context-packet-serializers (HAND-002)", () => {
     expect(packet).toMatchInlineSnapshot(`
       {
         "compressed": false,
-        "id": "packet-cursor-1",
-        "metadata": {
-          "createdAt": "2026-03-04T23:10:00.000Z",
-          "priority": "normal",
-        },
-        "mode": "sync",
-        "requiredCapabilities": [
+        "constraints": [
           "handoff",
           "tooling",
         ],
-        "routing": "direct",
-        "schemaVersion": "1.0",
-        "sourceAgent": "cursor",
-        "state": {
+        "conversationSummary": "",
+        "memoryRefs": [],
+        "packetId": "packet-cursor-1",
+        "permissionPolicy": {},
+        "receivingTool": "claude-code",
+        "schemaVersion": "1.0.0",
+        "sendingTool": "cursor",
+        "task": {},
+        "timestamp": "2026-03-04T23:10:00.000Z",
+        "workingContext": {
           "cursor": {
             "editor": {
               "activeFile": "src/handoff.ts",
@@ -138,9 +139,11 @@ describe("context-packet-serializers (HAND-002)", () => {
               },
             ],
           },
+          "mode": "sync",
+          "priority": "normal",
+          "routing": "direct",
+          "timeoutSeconds": 60,
         },
-        "targetAgent": "claude-code",
-        "timeoutSeconds": 60,
       }
     `);
   });

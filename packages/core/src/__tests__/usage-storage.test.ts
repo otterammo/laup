@@ -129,6 +129,21 @@ describe("usage-storage", () => {
       expect(page3.data).toHaveLength(1);
       expect(page3.hasMore).toBe(false);
     });
+
+    it("filters by sessionId and costCenter", async () => {
+      await storage.store(
+        makeEvent({ attribution: { userId: "u1", sessionId: "s1", costCenter: "cc-a" } }),
+      );
+      await storage.store(
+        makeEvent({ attribution: { userId: "u2", sessionId: "s2", costCenter: "cc-b" } }),
+      );
+
+      const bySession = await storage.query({ sessionId: "s1" });
+      expect(bySession.total).toBe(1);
+
+      const byCostCenter = await storage.query({ costCenter: "cc-b" });
+      expect(byCostCenter.total).toBe(1);
+    });
   });
 
   describe("aggregate", () => {
@@ -203,6 +218,63 @@ describe("usage-storage", () => {
 
       const result = await storage.summarize({}, "userId");
       expect(result[0]?.value).toBe("large");
+    });
+
+    it("supports dimension-specific summary helpers", async () => {
+      await storage.store(
+        makeEvent({
+          attribution: {
+            developerId: "dev-1",
+            teamId: "team-a",
+            projectId: "project-a",
+            skillId: "skill-a",
+          },
+          data: makeLlmData({ inputTokens: 25, outputTokens: 25 }),
+        }),
+      );
+
+      expect((await storage.summarizeByDeveloper({}))[0]?.value).toBe("dev-1");
+      expect((await storage.summarizeByTeam({}))[0]?.value).toBe("team-a");
+      expect((await storage.summarizeByProject({}))[0]?.value).toBe("project-a");
+      expect((await storage.summarizeBySkill({}))[0]?.value).toBe("skill-a");
+    });
+
+    it("supports multi-dimension summaries", async () => {
+      await storage.store(
+        makeEvent({
+          attribution: {
+            developerId: "dev-1",
+            teamId: "team-a",
+            projectId: "project-a",
+            skillId: "skill-a",
+            orgId: "org-1",
+          },
+          data: makeLlmData({ inputTokens: 100, outputTokens: 100 }),
+        }),
+      );
+      await storage.store(
+        makeEvent({
+          attribution: {
+            developerId: "dev-1",
+            teamId: "team-a",
+            projectId: "project-a",
+            skillId: "skill-a",
+            orgId: "org-1",
+          },
+          data: makeLlmData({ inputTokens: 50, outputTokens: 50 }),
+        }),
+      );
+
+      const result = await storage.summarizeByDimensions({}, [
+        "developerId",
+        "teamId",
+        "projectId",
+        "skillId",
+      ]);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.dimensions["developerId"]).toBe("dev-1");
+      expect(result[0]?.totalTokens).toBe(300);
+      expect(result[0]?.eventCount).toBe(2);
     });
   });
 

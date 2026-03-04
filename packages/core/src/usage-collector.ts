@@ -48,26 +48,10 @@ export interface UsageCollector {
 }
 
 export type UsageCollectionInput =
-  | {
-      type: "llm-call";
-      data: LlmUsage;
-      attribution?: UsageAttribution;
-    }
-  | {
-      type: "mcp-invocation";
-      data: McpInvocationUsage;
-      attribution?: UsageAttribution;
-    }
-  | {
-      type: "skill-invocation";
-      data: SkillInvocationUsage;
-      attribution?: UsageAttribution;
-    }
-  | {
-      type: "memory-operation";
-      data: MemoryOperationUsage;
-      attribution?: UsageAttribution;
-    };
+  | { type: "llm-call"; data: LlmUsage; attribution?: UsageAttribution }
+  | { type: "mcp-invocation"; data: McpInvocationUsage; attribution?: UsageAttribution }
+  | { type: "skill-invocation"; data: SkillInvocationUsage; attribution?: UsageAttribution }
+  | { type: "memory-operation"; data: MemoryOperationUsage; attribution?: UsageAttribution };
 
 export interface AdapterUsageContract {
   adapterId: string;
@@ -96,7 +80,7 @@ class DefaultUsageCollector implements UsageCollector {
 
   constructor(options: UsageCollectorOptions) {
     this.storage = options.storage;
-    this.defaultAttribution = options.defaultAttribution ?? {};
+    this.defaultAttribution = this.normalizeAttribution(options.defaultAttribution ?? {});
     this.now = options.now ?? (() => new Date());
     this.idFactory =
       options.idFactory ?? (() => `evt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
@@ -107,11 +91,21 @@ class DefaultUsageCollector implements UsageCollector {
     data: UsageEventInputMap[T],
     attribution?: UsageAttribution,
   ): Promise<UsageEvent> {
+    const baseAttribution = this.normalizeAttribution({
+      ...this.defaultAttribution,
+      ...(attribution ?? {}),
+    });
+
+    const normalizedAttribution: UsageAttribution =
+      type === "skill-invocation" && !baseAttribution.skillId
+        ? { ...baseAttribution, skillId: (data as SkillInvocationUsage).skillId }
+        : baseAttribution;
+
     const event: UsageEvent = UsageEventSchema.parse({
       id: this.idFactory(),
       type,
       timestamp: this.now().toISOString(),
-      attribution: { ...this.defaultAttribution, ...(attribution ?? {}) },
+      attribution: normalizedAttribution,
       data,
     });
 
@@ -120,38 +114,52 @@ class DefaultUsageCollector implements UsageCollector {
   }
 
   async collectBatch(events: UsageCollectionInput[]): Promise<UsageEvent[]> {
-    const normalized = events.map((event) =>
-      UsageEventSchema.parse({
+    const normalized = events.map((event) => {
+      const baseAttribution = this.normalizeAttribution({
+        ...this.defaultAttribution,
+        ...(event.attribution ?? {}),
+      });
+
+      const attribution: UsageAttribution =
+        event.type === "skill-invocation" && !baseAttribution.skillId
+          ? { ...baseAttribution, skillId: event.data.skillId }
+          : baseAttribution;
+
+      return UsageEventSchema.parse({
         id: this.idFactory(),
         type: event.type,
         timestamp: this.now().toISOString(),
-        attribution: { ...this.defaultAttribution, ...(event.attribution ?? {}) },
+        attribution,
         data: event.data,
-      }),
-    );
+      });
+    });
 
     await this.storage.storeBatch(normalized);
     return normalized;
   }
 
+  private normalizeAttribution(attribution: UsageAttribution): UsageAttribution {
+    const developerId = attribution.developerId ?? attribution.userId;
+    const userId = attribution.userId ?? attribution.developerId;
+
+    return { ...attribution, developerId, userId };
+  }
+
   collectLlmCall(data: LlmUsage, attribution?: UsageAttribution): Promise<UsageEvent> {
     return this.collect("llm-call", data, attribution);
   }
-
   collectMcpInvocation(
     data: McpInvocationUsage,
     attribution?: UsageAttribution,
   ): Promise<UsageEvent> {
     return this.collect("mcp-invocation", data, attribution);
   }
-
   collectSkillInvocation(
     data: SkillInvocationUsage,
     attribution?: UsageAttribution,
   ): Promise<UsageEvent> {
     return this.collect("skill-invocation", data, attribution);
   }
-
   collectMemoryOperation(
     data: MemoryOperationUsage,
     attribution?: UsageAttribution,

@@ -54,6 +54,9 @@ export {
   TieredCache,
 } from "./cache.js";
 export type {
+  AttributionAggregate,
+  AttributionCombinationAggregate,
+  AttributionDimension,
   BudgetAlert,
   CostCap,
   CostSummary,
@@ -68,6 +71,12 @@ export type {
 } from "./cost-schema.js";
 export {
   aggregateUsage,
+  aggregateUsageByAttribution,
+  aggregateUsageByAttributions,
+  aggregateUsageByDeveloper,
+  aggregateUsageByProject,
+  aggregateUsageBySkill,
+  aggregateUsageByTeam,
   BudgetAlertSchema,
   CostCapSchema,
   CostSummarySchema,

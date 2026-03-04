@@ -20,19 +20,6 @@ export {
   PreActionVetoError,
 } from "./action-hooks.js";
 export type {
-  ActionTaxonomy,
-  ActionTaxonomyIndex,
-  ActionTaxonomyNode,
-  ActionTaxonomyValidationResult,
-} from "./action-taxonomy.js";
-export {
-  ActionTaxonomyNodeSchema,
-  ActionTaxonomySchema,
-  createActionTaxonomyIndex,
-  resolveTaxonomyActionMatches,
-  validateActionTaxonomy,
-} from "./action-taxonomy.js";
-export type {
   ApprovalDecisionStatus,
   ApprovalEnforcementStatus,
   ApprovalGateConfig,
@@ -134,7 +121,6 @@ export type {
   PolicyCondition,
   PolicyEffect,
   PolicyEvaluatorConfig,
-  PolicyEvaluatorOptions,
   PolicyRiskLevel,
 } from "./policy-evaluator.js";
 export {

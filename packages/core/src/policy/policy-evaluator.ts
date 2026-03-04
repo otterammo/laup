@@ -28,12 +28,6 @@
  * policies will always produce the same result.
  */
 
-import {
-  type ActionTaxonomy,
-  type ActionTaxonomyIndex,
-  createActionTaxonomyIndex,
-  resolveTaxonomyActionMatches,
-} from "./action-taxonomy.js";
 import { conditionsMatch } from "./condition-evaluator.js";
 import type { EvaluationContext, PolicyScope } from "./evaluation-context.js";
 
@@ -110,10 +104,6 @@ export interface PolicyEvaluatorConfig {
   defaultEffect: DefaultEffect;
 }
 
-export interface PolicyEvaluatorOptions extends Partial<PolicyEvaluatorConfig> {
-  actionTaxonomy?: ActionTaxonomy | ActionTaxonomyIndex;
-}
-
 const SCOPE_PRIORITY: readonly PolicyScope[] = ["user", "project", "team", "org"] as const;
 
 function getScopePriority(scope: PolicyScope): number {
@@ -159,15 +149,7 @@ export function resolveInheritedPolicies(
 
 export class PolicyEvaluator {
   private readonly config: PolicyEvaluatorConfig;
-  private readonly actionTaxonomy: ActionTaxonomyIndex | undefined;
-
-  constructor(config: PolicyEvaluatorOptions = {}) {
-    this.actionTaxonomy = config.actionTaxonomy
-      ? "descendantsById" in config.actionTaxonomy
-        ? config.actionTaxonomy
-        : createActionTaxonomyIndex(config.actionTaxonomy)
-      : undefined;
-
+  constructor(config: Partial<PolicyEvaluatorConfig> = {}) {
     this.config = {
       defaultEffect: config.defaultEffect ?? "deny",
     };
@@ -258,13 +240,7 @@ export class PolicyEvaluator {
   }
 
   private matchesActionPattern(action: string, patterns: string[]): boolean {
-    return patterns.some((pattern) => {
-      if (this.matchesPattern(action, [pattern])) {
-        return true;
-      }
-
-      return resolveTaxonomyActionMatches(action, pattern, this.actionTaxonomy);
-    });
+    return this.matchesPattern(action, patterns);
   }
 
   private matchesPattern(value: string, patterns: string[]): boolean {

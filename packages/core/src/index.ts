@@ -54,6 +54,18 @@ export {
   TieredCache,
 } from "./cache.js";
 export type {
+  FallbackPricing,
+  LlmCostBreakdown,
+  MissingPriceStrategy,
+  UsageCostTotals,
+  UsageEventCost,
+} from "./cost-conversion.js";
+export {
+  CostConversionService,
+  createCostConversionService,
+  PriceUnavailableError,
+} from "./cost-conversion.js";
+export type {
   AttributionAggregate,
   AttributionDimension,
   BudgetAlert,
@@ -193,6 +205,14 @@ export {
   MemoryJobQueue,
 } from "./job-queue.js";
 export type {
+  McpHealthMonitorConfig,
+  McpHealthMonitorHooks,
+  McpHealthTransition,
+  McpLivenessChecker,
+  McpServerRegistryLike,
+} from "./mcp-health-monitor.js";
+export { McpHealthMonitorService } from "./mcp-health-monitor.js";
+export type {
   McpPropagationOptions,
   McpPropagationReport,
   McpPropagationTarget,
@@ -210,6 +230,7 @@ export type {
   McpHealthCheck,
   McpHealthState,
   McpHealthStatus,
+  McpLastCheckStatus,
   McpScope,
   McpServer,
   McpTransport,
@@ -440,6 +461,15 @@ export {
   validatePolicyJson,
   validatePolicyYaml,
 } from "./policy/index.js";
+export type {
+  InMemoryPricingProviderOptions,
+  PricingProvider,
+  PricingRefreshResult,
+} from "./pricing-provider.js";
+export {
+  createPricingProvider,
+  InMemoryPricingProvider,
+} from "./pricing-provider.js";
 export type {
   AggregateFunction,
   AggregateSpec,

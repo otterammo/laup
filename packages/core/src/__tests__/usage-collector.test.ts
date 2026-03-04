@@ -136,6 +136,24 @@ describe("usage-collector", () => {
     expect(result.data[0]?.attribution.sessionId).toBe("s-1");
   });
 
+  it("normalizes skill attribution from invocation data", async () => {
+    const collector = createUsageCollector({
+      storage,
+      defaultAttribution: { developerId: "dev-1" },
+      idFactory: () => "evt_skill",
+    });
+
+    const event = await collector.collectSkillInvocation({
+      skillId: "acme/code-review",
+      success: true,
+    });
+
+    expect(event.attribution.skillId).toBe("acme/code-review");
+
+    const result = await storage.query({ skillId: "acme/code-review" });
+    expect(result.total).toBe(1);
+  });
+
   it("integrates with sql usage storage persistence", async () => {
     const db = new InMemoryDbAdapter();
     await db.connect();
@@ -145,7 +163,7 @@ describe("usage-collector", () => {
 
     const collector = createUsageCollector({
       storage: sqlStorage,
-      defaultAttribution: { userId: "sql-user" },
+      defaultAttribution: { userId: "sql-user", sessionId: "session-sql" },
     });
 
     await collector.collectMemoryOperation({
@@ -154,8 +172,13 @@ describe("usage-collector", () => {
       success: true,
     });
 
-    const persisted = await db.query("SELECT * FROM usage_events");
+    const persisted = await db.query<{ user_id: string; developer_id: string; session_id: string }>(
+      "SELECT user_id, developer_id, session_id FROM usage_events",
+    );
     expect(persisted.rowCount).toBe(1);
+    expect(persisted.rows[0]?.user_id).toBe("sql-user");
+    expect(persisted.rows[0]?.developer_id).toBe("sql-user");
+    expect(persisted.rows[0]?.session_id).toBe("session-sql");
 
     await db.disconnect();
   });

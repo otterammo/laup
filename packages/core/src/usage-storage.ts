@@ -6,55 +6,26 @@
 import type { LlmUsage, UsageAttribution, UsageEvent } from "./cost-schema.js";
 import type { DbAdapter } from "./db-adapter.js";
 
-/**
- * Time bucket for aggregation.
- */
 export type TimeBucket = "hour" | "day" | "week" | "month";
 
-/**
- * Usage query filters.
- */
 export interface UsageQueryFilter {
-  /** Filter by developer ID */
   developerId?: string;
-
   /** @deprecated Use developerId */
   userId?: string;
-
-  /** Filter by team ID */
   teamId?: string;
-
-  /** Filter by project ID */
   projectId?: string;
-
-  /** Filter by org ID */
   orgId?: string;
-
-  /** Filter by event type */
   eventType?: string;
-
-  /** Filter by model */
   model?: string;
-
-  /** Filter by skill ID */
   skillId?: string;
-
-  /** Filter by adapter ID */
   adapterId?: string;
-
-  /** Filter by tool category */
   toolCategory?: string;
-
-  /** Start time (inclusive) */
+  sessionId?: string;
+  costCenter?: string;
   startTime?: Date;
-
-  /** End time (exclusive) */
   endTime?: Date;
 }
 
-/**
- * Aggregated usage result.
- */
 export interface AggregatedUsage {
   bucket: string;
   totalTokens: number;
@@ -63,9 +34,6 @@ export interface AggregatedUsage {
   eventCount: number;
 }
 
-/**
- * Usage summary by dimension.
- */
 export interface UsageSummary {
   dimension: string;
   value: string;
@@ -79,17 +47,11 @@ export interface MultiDimensionUsageSummary {
   eventCount: number;
 }
 
-/**
- * Pagination options.
- */
 export interface PaginationOptions {
   limit?: number;
   offset?: number;
 }
 
-/**
- * Paginated result.
- */
 export interface PaginatedResult<T> {
   data: T[];
   total: number;
@@ -98,94 +60,57 @@ export interface PaginatedResult<T> {
   hasMore: boolean;
 }
 
-/**
- * Usage event storage interface.
- */
 export interface UsageStorage {
-  /**
-   * Initialize storage (create tables, indexes).
-   */
   init(): Promise<void>;
-
-  /**
-   * Store a usage event.
-   */
   store(event: UsageEvent): Promise<string>;
-
-  /**
-   * Store multiple events in batch.
-   */
   storeBatch(events: UsageEvent[]): Promise<string[]>;
-
-  /**
-   * Query events with filters and pagination.
-   */
   query(
     filter: UsageQueryFilter,
     pagination?: PaginationOptions,
   ): Promise<PaginatedResult<UsageEvent>>;
-
-  /**
-   * Get aggregated usage by time bucket.
-   */
   aggregate(filter: UsageQueryFilter, bucket: TimeBucket): Promise<AggregatedUsage[]>;
-
-  /**
-   * Get usage summary grouped by dimension.
-   */
   summarize(filter: UsageQueryFilter, dimension: keyof UsageAttribution): Promise<UsageSummary[]>;
-
-  /**
-   * Get usage summary grouped by multiple dimensions.
-   */
+  summarizeByDeveloper(filter: UsageQueryFilter): Promise<UsageSummary[]>;
+  summarizeByTeam(filter: UsageQueryFilter): Promise<UsageSummary[]>;
+  summarizeByProject(filter: UsageQueryFilter): Promise<UsageSummary[]>;
+  summarizeBySkill(filter: UsageQueryFilter): Promise<UsageSummary[]>;
   summarizeByDimensions(
     filter: UsageQueryFilter,
     dimensions: (keyof UsageAttribution)[],
   ): Promise<MultiDimensionUsageSummary[]>;
-
-  /**
-   * Delete events older than a given date.
-   */
   prune(before: Date): Promise<number>;
-
-  /**
-   * Get total event count.
-   */
   count(filter?: UsageQueryFilter): Promise<number>;
 }
 
-/**
- * Helper to check if event is LLM type and get usage data.
- */
 function getLlmUsage(event: UsageEvent): LlmUsage | null {
-  if (event.type === "llm-call") {
-    return event.data as LlmUsage;
-  }
-  return null;
+  return event.type === "llm-call" ? (event.data as LlmUsage) : null;
 }
 
 function getAttributionValue(event: UsageEvent, dimension: keyof UsageAttribution): string {
   if (dimension === "developerId") {
     return event.attribution.developerId ?? event.attribution.userId ?? "unknown";
   }
-
   if (dimension === "userId") {
     return event.attribution.userId ?? event.attribution.developerId ?? "unknown";
+  }
+  if (dimension === "skillId") {
+    return (
+      event.attribution.skillId ??
+      (event.type === "skill-invocation"
+        ? (event.data as { skillId: string }).skillId
+        : undefined) ??
+      "unknown"
+    );
   }
 
   return String(event.attribution[dimension] ?? "unknown");
 }
 
-/**
- * In-memory usage storage for testing.
- */
 export class InMemoryUsageStorage implements UsageStorage {
-  private events: Map<string, UsageEvent> = new Map();
+  private events = new Map<string, UsageEvent>();
   private nextId = 1;
 
-  async init(): Promise<void> {
-    // No-op for in-memory
-  }
+  async init(): Promise<void> {}
 
   async store(event: UsageEvent): Promise<string> {
     const id = `evt_${this.nextId++}`;
@@ -195,9 +120,7 @@ export class InMemoryUsageStorage implements UsageStorage {
 
   async storeBatch(events: UsageEvent[]): Promise<string[]> {
     const ids: string[] = [];
-    for (const event of events) {
-      ids.push(await this.store(event));
-    }
+    for (const event of events) ids.push(await this.store(event));
     return ids;
   }
 
@@ -208,11 +131,8 @@ export class InMemoryUsageStorage implements UsageStorage {
     const filtered = this.filterEvents(filter);
     const limit = pagination?.limit ?? 100;
     const offset = pagination?.offset ?? 0;
-
-    const data = filtered.slice(offset, offset + limit);
-
     return {
-      data,
+      data: filtered.slice(offset, offset + limit),
       total: filtered.length,
       limit,
       offset,
@@ -240,8 +160,7 @@ export class InMemoryUsageStorage implements UsageStorage {
         existing.outputTokens += llmUsage.outputTokens;
         existing.totalTokens += llmUsage.inputTokens + llmUsage.outputTokens;
       }
-      existing.eventCount++;
-
+      existing.eventCount += 1;
       buckets.set(bucketKey, existing);
     }
 
@@ -257,23 +176,27 @@ export class InMemoryUsageStorage implements UsageStorage {
 
     for (const event of filtered) {
       const value = getAttributionValue(event, dimension);
-      const existing = summaries.get(value) ?? {
-        dimension,
-        value,
-        totalTokens: 0,
-        eventCount: 0,
-      };
-
+      const existing = summaries.get(value) ?? { dimension, value, totalTokens: 0, eventCount: 0 };
       const llmUsage = getLlmUsage(event);
-      if (llmUsage) {
-        existing.totalTokens += llmUsage.inputTokens + llmUsage.outputTokens;
-      }
-      existing.eventCount++;
-
+      if (llmUsage) existing.totalTokens += llmUsage.inputTokens + llmUsage.outputTokens;
+      existing.eventCount += 1;
       summaries.set(value, existing);
     }
 
     return Array.from(summaries.values()).sort((a, b) => b.totalTokens - a.totalTokens);
+  }
+
+  async summarizeByDeveloper(filter: UsageQueryFilter): Promise<UsageSummary[]> {
+    return this.summarize(filter, "developerId");
+  }
+  async summarizeByTeam(filter: UsageQueryFilter): Promise<UsageSummary[]> {
+    return this.summarize(filter, "teamId");
+  }
+  async summarizeByProject(filter: UsageQueryFilter): Promise<UsageSummary[]> {
+    return this.summarize(filter, "projectId");
+  }
+  async summarizeBySkill(filter: UsageQueryFilter): Promise<UsageSummary[]> {
+    return this.summarize(filter, "skillId");
   }
 
   async summarizeByDimensions(
@@ -294,13 +217,9 @@ export class InMemoryUsageStorage implements UsageStorage {
         totalTokens: 0,
         eventCount: 0,
       };
-
       const llmUsage = getLlmUsage(event);
-      if (llmUsage) {
-        existing.totalTokens += llmUsage.inputTokens + llmUsage.outputTokens;
-      }
-      existing.eventCount++;
-
+      if (llmUsage) existing.totalTokens += llmUsage.inputTokens + llmUsage.outputTokens;
+      existing.eventCount += 1;
       summaries.set(key, existing);
     }
 
@@ -310,20 +229,17 @@ export class InMemoryUsageStorage implements UsageStorage {
   async prune(before: Date): Promise<number> {
     let pruned = 0;
     const beforeTime = before.getTime();
-
     for (const [id, event] of this.events) {
       if (new Date(event.timestamp).getTime() < beforeTime) {
         this.events.delete(id);
-        pruned++;
+        pruned += 1;
       }
     }
-
     return pruned;
   }
 
   async count(filter?: UsageQueryFilter): Promise<number> {
-    if (!filter) return this.events.size;
-    return this.filterEvents(filter).length;
+    return filter ? this.filterEvents(filter).length : this.events.size;
   }
 
   private filterEvents(filter: UsageQueryFilter): UsageEvent[] {
@@ -335,22 +251,20 @@ export class InMemoryUsageStorage implements UsageStorage {
       if (filter.projectId && event.attribution.projectId !== filter.projectId) return false;
       if (filter.orgId && event.attribution.orgId !== filter.orgId) return false;
       if (filter.eventType && event.type !== filter.eventType) return false;
-
       if (filter.model) {
         const llmUsage = getLlmUsage(event);
         if (!llmUsage || llmUsage.model !== filter.model) return false;
       }
-
       if (filter.skillId && event.attribution.skillId !== filter.skillId) return false;
       if (filter.adapterId && event.attribution.adapterId !== filter.adapterId) return false;
-      if (filter.toolCategory && event.attribution.toolCategory !== filter.toolCategory) {
+      if (filter.toolCategory && event.attribution.toolCategory !== filter.toolCategory)
         return false;
-      }
+      if (filter.sessionId && event.attribution.sessionId !== filter.sessionId) return false;
+      if (filter.costCenter && event.attribution.costCenter !== filter.costCenter) return false;
 
       const eventTime = new Date(event.timestamp).getTime();
       if (filter.startTime && eventTime < filter.startTime.getTime()) return false;
       if (filter.endTime && eventTime >= filter.endTime.getTime()) return false;
-
       return true;
     });
   }
@@ -369,8 +283,7 @@ export class InMemoryUsageStorage implements UsageStorage {
       case "week": {
         const weekStart = new Date(date);
         weekStart.setDate(date.getDate() - date.getDay());
-        const ws = weekStart;
-        return `${ws.getFullYear()}-W${String(Math.ceil((ws.getDate() + 1) / 7)).padStart(2, "0")}`;
+        return `${weekStart.getFullYear()}-W${String(Math.ceil((weekStart.getDate() + 1) / 7)).padStart(2, "0")}`;
       }
       case "month":
         return `${year}-${month}`;
@@ -378,9 +291,6 @@ export class InMemoryUsageStorage implements UsageStorage {
   }
 }
 
-/**
- * SQL-based usage storage.
- */
 export class SqlUsageStorage implements UsageStorage {
   constructor(private db: DbAdapter) {}
 
@@ -396,6 +306,7 @@ export class SqlUsageStorage implements UsageStorage {
         project_id TEXT,
         org_id TEXT,
         skill_id TEXT,
+        session_id TEXT,
         adapter_id TEXT,
         tool_category TEXT,
         cost_center TEXT,
@@ -404,7 +315,6 @@ export class SqlUsageStorage implements UsageStorage {
       )
     `);
 
-    // Indexes for common queries
     await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage_events(timestamp)`,
     );
@@ -421,8 +331,8 @@ export class SqlUsageStorage implements UsageStorage {
     const id = event.id ?? `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     await this.db.execute(
-      `INSERT INTO usage_events (id, type, timestamp, user_id, developer_id, team_id, project_id, org_id, skill_id, adapter_id, tool_category, cost_center, data)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO usage_events (id, type, timestamp, user_id, developer_id, team_id, project_id, org_id, skill_id, session_id, adapter_id, tool_category, cost_center, data)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         event.type,
@@ -433,6 +343,7 @@ export class SqlUsageStorage implements UsageStorage {
         event.attribution.projectId ?? null,
         event.attribution.orgId ?? null,
         event.attribution.skillId ?? null,
+        event.attribution.sessionId ?? null,
         event.attribution.adapterId ?? null,
         event.attribution.toolCategory ?? null,
         event.attribution.costCenter ?? null,
@@ -448,10 +359,9 @@ export class SqlUsageStorage implements UsageStorage {
     await this.db.withTransaction(async (tx) => {
       for (const event of events) {
         const id = event.id ?? `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
         await tx.query(
-          `INSERT INTO usage_events (id, type, timestamp, user_id, developer_id, team_id, project_id, org_id, skill_id, adapter_id, tool_category, cost_center, data)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO usage_events (id, type, timestamp, user_id, developer_id, team_id, project_id, org_id, skill_id, session_id, adapter_id, tool_category, cost_center, data)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             event.type,
@@ -462,6 +372,7 @@ export class SqlUsageStorage implements UsageStorage {
             event.attribution.projectId ?? null,
             event.attribution.orgId ?? null,
             event.attribution.skillId ?? null,
+            event.attribution.sessionId ?? null,
             event.attribution.adapterId ?? null,
             event.attribution.toolCategory ?? null,
             event.attribution.costCenter ?? null,
@@ -478,7 +389,6 @@ export class SqlUsageStorage implements UsageStorage {
     _filter: UsageQueryFilter,
     pagination?: PaginationOptions,
   ): Promise<PaginatedResult<UsageEvent>> {
-    // Simplified implementation - real version would build WHERE clause from filter
     const limit = pagination?.limit ?? 100;
     const offset = pagination?.offset ?? 0;
 
@@ -502,7 +412,6 @@ export class SqlUsageStorage implements UsageStorage {
   }
 
   async aggregate(_filter: UsageQueryFilter, _bucket: TimeBucket): Promise<AggregatedUsage[]> {
-    // Simplified - real version would use date functions for bucketing
     return [];
   }
 
@@ -510,23 +419,31 @@ export class SqlUsageStorage implements UsageStorage {
     _filter: UsageQueryFilter,
     _dimension: keyof UsageAttribution,
   ): Promise<UsageSummary[]> {
-    // Simplified - real version would GROUP BY dimension
     return [];
+  }
+
+  async summarizeByDeveloper(filter: UsageQueryFilter): Promise<UsageSummary[]> {
+    return this.summarize(filter, "developerId");
+  }
+  async summarizeByTeam(filter: UsageQueryFilter): Promise<UsageSummary[]> {
+    return this.summarize(filter, "teamId");
+  }
+  async summarizeByProject(filter: UsageQueryFilter): Promise<UsageSummary[]> {
+    return this.summarize(filter, "projectId");
+  }
+  async summarizeBySkill(filter: UsageQueryFilter): Promise<UsageSummary[]> {
+    return this.summarize(filter, "skillId");
   }
 
   async summarizeByDimensions(
     _filter: UsageQueryFilter,
     _dimensions: (keyof UsageAttribution)[],
   ): Promise<MultiDimensionUsageSummary[]> {
-    // Simplified - real version would GROUP BY combined dimensions
     return [];
   }
 
   async prune(before: Date): Promise<number> {
-    const result = await this.db.execute(`DELETE FROM usage_events WHERE timestamp < ?`, [
-      before.toISOString(),
-    ]);
-    return result;
+    return this.db.execute(`DELETE FROM usage_events WHERE timestamp < ?`, [before.toISOString()]);
   }
 
   async count(_filter?: UsageQueryFilter): Promise<number> {
@@ -537,9 +454,6 @@ export class SqlUsageStorage implements UsageStorage {
   }
 }
 
-/**
- * Create usage storage with the given database adapter.
- */
 export function createUsageStorage(db: DbAdapter): UsageStorage {
   return new SqlUsageStorage(db);
 }

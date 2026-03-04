@@ -67,6 +67,7 @@ export {
 } from "./cost-conversion.js";
 export type {
   AttributionAggregate,
+  AttributionCombinationAggregate,
   AttributionDimension,
   BudgetAlert,
   CostCap,
@@ -84,6 +85,11 @@ export {
   AttributionDimensionSchema,
   aggregateUsage,
   aggregateUsageByAttribution,
+  aggregateUsageByAttributions,
+  aggregateUsageByDeveloper,
+  aggregateUsageByProject,
+  aggregateUsageBySkill,
+  aggregateUsageByTeam,
   BudgetAlertSchema,
   CostCapSchema,
   CostSummarySchema,

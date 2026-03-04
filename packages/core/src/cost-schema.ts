@@ -174,6 +174,12 @@ export interface AttributionAggregate {
   eventCount: number;
 }
 
+export interface AttributionCombinationAggregate {
+  dimensions: Record<AttributionDimension, string>;
+  totalCost: number;
+  eventCount: number;
+}
+
 /**
  * Usage event record (COST-001).
  */
@@ -389,6 +395,20 @@ export function getAttributionValue(
   return String(attribution[dimension] ?? "unknown");
 }
 
+function getEventCost(event: UsageEvent, pricing: Map<string, ModelPricing>): number {
+  if (event.type !== "llm-call") {
+    return 0;
+  }
+
+  const data = event.data as LlmUsage;
+  const modelPricing = pricing.get(`${data.provider}/${data.model}`);
+  if (!modelPricing) {
+    return 0;
+  }
+
+  return calculateLlmCost(data, modelPricing);
+}
+
 export function aggregateUsageByAttribution(
   events: UsageEvent[],
   dimension: AttributionDimension,
@@ -400,21 +420,67 @@ export function aggregateUsageByAttribution(
     const value = getAttributionValue(event.attribution, dimension);
     const existing = grouped.get(value) ?? { dimension, value, totalCost: 0, eventCount: 0 };
 
-    let eventCost = 0;
-    if (event.type === "llm-call") {
-      const data = event.data as LlmUsage;
-      const modelPricing = pricing.get(`${data.provider}/${data.model}`);
-      if (modelPricing) {
-        eventCost = calculateLlmCost(data, modelPricing);
-      }
-    }
-
-    existing.totalCost += eventCost;
+    existing.totalCost += getEventCost(event, pricing);
     existing.eventCount += 1;
     grouped.set(value, existing);
   }
 
   return Array.from(grouped.values()).sort((a, b) => b.totalCost - a.totalCost);
+}
+
+export function aggregateUsageByAttributions(
+  events: UsageEvent[],
+  dimensions: AttributionDimension[],
+  pricing: Map<string, ModelPricing>,
+): AttributionCombinationAggregate[] {
+  const grouped = new Map<string, AttributionCombinationAggregate>();
+
+  for (const event of events) {
+    const dimensionValues = Object.fromEntries(
+      dimensions.map((dimension) => [dimension, getAttributionValue(event.attribution, dimension)]),
+    ) as Record<AttributionDimension, string>;
+
+    const key = dimensions.map((dimension) => dimensionValues[dimension]).join("::");
+    const existing = grouped.get(key) ?? {
+      dimensions: dimensionValues,
+      totalCost: 0,
+      eventCount: 0,
+    };
+
+    existing.totalCost += getEventCost(event, pricing);
+    existing.eventCount += 1;
+    grouped.set(key, existing);
+  }
+
+  return Array.from(grouped.values()).sort((a, b) => b.totalCost - a.totalCost);
+}
+
+export function aggregateUsageByDeveloper(
+  events: UsageEvent[],
+  pricing: Map<string, ModelPricing>,
+): AttributionAggregate[] {
+  return aggregateUsageByAttribution(events, "developerId", pricing);
+}
+
+export function aggregateUsageByTeam(
+  events: UsageEvent[],
+  pricing: Map<string, ModelPricing>,
+): AttributionAggregate[] {
+  return aggregateUsageByAttribution(events, "teamId", pricing);
+}
+
+export function aggregateUsageByProject(
+  events: UsageEvent[],
+  pricing: Map<string, ModelPricing>,
+): AttributionAggregate[] {
+  return aggregateUsageByAttribution(events, "projectId", pricing);
+}
+
+export function aggregateUsageBySkill(
+  events: UsageEvent[],
+  pricing: Map<string, ModelPricing>,
+): AttributionAggregate[] {
+  return aggregateUsageByAttribution(events, "skillId", pricing);
 }
 
 export function aggregateUsage(

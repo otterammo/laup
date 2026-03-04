@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   aggregateUsage,
+  aggregateUsageByAttribution,
+  aggregateUsageByAttributions,
+  aggregateUsageByDeveloper,
+  aggregateUsageByProject,
+  aggregateUsageBySkill,
+  aggregateUsageByTeam,
   type BudgetAlert,
   type CostCap,
   calculateLlmCost,
@@ -31,12 +37,35 @@ describe("cost-schema", () => {
     success: true,
   };
 
+  const pricingMap = new Map<string, ModelPricing>([["anthropic/claude-sonnet-4", samplePricing]]);
+
+  const events: UsageEvent[] = [
+    {
+      id: "evt-1",
+      type: "llm-call",
+      timestamp: "2026-01-15T10:00:00Z",
+      attribution: { userId: "user-1", teamId: "team-a", projectId: "project-a" },
+      data: sampleLlmUsage,
+    },
+    {
+      id: "evt-2",
+      type: "llm-call",
+      timestamp: "2026-01-15T11:00:00Z",
+      attribution: { userId: "user-2", teamId: "team-a", projectId: "project-a" },
+      data: { ...sampleLlmUsage, inputTokens: 2000, outputTokens: 1000 },
+    },
+    {
+      id: "evt-3",
+      type: "skill-invocation",
+      timestamp: "2026-01-15T12:00:00Z",
+      attribution: { userId: "user-1", skillId: "acme/code-review" },
+      data: { skillId: "acme/code-review", version: "1.0.0", success: true },
+    },
+  ];
+
   describe("calculateLlmCost", () => {
     it("calculates basic input/output cost", () => {
       const cost = calculateLlmCost(sampleLlmUsage, samplePricing);
-      // 1000 input tokens = $0.003
-      // 500 output tokens = $0.0075
-      // Total = $0.0105
       expect(cost).toBeCloseTo(0.0105, 6);
     });
 
@@ -47,10 +76,6 @@ describe("cost-schema", () => {
         cacheWriteTokens: 200,
       };
       const cost = calculateLlmCost(usageWithCache, samplePricing);
-      // Base: $0.0105
-      // Cache read: 500 tokens = $0.00015
-      // Cache write: 200 tokens = $0.00075
-      // Total = $0.0114
       expect(cost).toBeCloseTo(0.0114, 6);
     });
 
@@ -123,35 +148,33 @@ describe("cost-schema", () => {
     });
   });
 
+  describe("attribution aggregation", () => {
+    it("aggregates by single dimension", () => {
+      const byTeam = aggregateUsageByAttribution(events, "teamId", pricingMap);
+      expect(byTeam[0]?.value).toBe("team-a");
+      expect(byTeam[0]?.eventCount).toBe(2);
+      expect(byTeam[0]?.totalCost).toBeCloseTo(0.0315, 4);
+    });
+
+    it("aggregates by combined dimensions", () => {
+      const combined = aggregateUsageByAttributions(
+        events,
+        ["teamId", "projectId", "developerId"],
+        pricingMap,
+      );
+      expect(combined).toHaveLength(3);
+      expect(combined.some((entry) => entry.dimensions.teamId === "team-a")).toBe(true);
+    });
+
+    it("provides per-dimension helper utilities", () => {
+      expect(aggregateUsageByDeveloper(events, pricingMap).length).toBeGreaterThan(0);
+      expect(aggregateUsageByTeam(events, pricingMap).length).toBeGreaterThan(0);
+      expect(aggregateUsageByProject(events, pricingMap).length).toBeGreaterThan(0);
+      expect(aggregateUsageBySkill(events, pricingMap).length).toBeGreaterThan(0);
+    });
+  });
+
   describe("aggregateUsage", () => {
-    const pricingMap = new Map<string, ModelPricing>([
-      ["anthropic/claude-sonnet-4", samplePricing],
-    ]);
-
-    const events: UsageEvent[] = [
-      {
-        id: "evt-1",
-        type: "llm-call",
-        timestamp: "2026-01-15T10:00:00Z",
-        attribution: { userId: "user-1", teamId: "team-a" },
-        data: sampleLlmUsage,
-      },
-      {
-        id: "evt-2",
-        type: "llm-call",
-        timestamp: "2026-01-15T11:00:00Z",
-        attribution: { userId: "user-1", teamId: "team-a" },
-        data: { ...sampleLlmUsage, inputTokens: 2000, outputTokens: 1000 },
-      },
-      {
-        id: "evt-3",
-        type: "skill-invocation",
-        timestamp: "2026-01-15T12:00:00Z",
-        attribution: { userId: "user-1", skillId: "acme/code-review" },
-        data: { skillId: "acme/code-review", version: "1.0.0", success: true },
-      },
-    ];
-
     it("aggregates costs by type", () => {
       const summary = aggregateUsage(events, pricingMap, "2026-01-15", "2026-01-16");
       expect(summary.byType["llm-call"]).toBeGreaterThan(0);
@@ -171,9 +194,6 @@ describe("cost-schema", () => {
 
     it("calculates total cost", () => {
       const summary = aggregateUsage(events, pricingMap, "2026-01-15", "2026-01-16");
-      // Event 1: $0.0105
-      // Event 2: $0.021 (2x input, 2x output)
-      // Total LLM: $0.0315
       expect(summary.totalCost).toBeCloseTo(0.0315, 4);
     });
 

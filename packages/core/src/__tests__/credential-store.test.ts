@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { InMemoryAuditStorage } from "../audit-storage.js";
 import {
   type CredentialMetadata,
   type CredentialStore,
@@ -201,6 +202,46 @@ describe("credential-store", () => {
     });
   });
 
+  describe("revoke", () => {
+    it("revokes credential and blocks reads", async () => {
+      const id = await store.store(makeMetadata(), "secret");
+
+      await store.revoke(id, "user-1", "compromised");
+
+      const meta = await store.getMetadata(id);
+      expect(meta?.status).toBe("revoked");
+      expect(meta?.revokedBy).toBe("user-1");
+
+      const value = await store.get(id, "user-1");
+      expect(value).toBeNull();
+    });
+  });
+
+  describe("access policy", () => {
+    it("allows owner to configure read ACL and enforces it", async () => {
+      const id = await store.store(makeMetadata(), "secret");
+
+      await store.setAccessPolicy(
+        id,
+        { readers: ["svc-reader"], allowOwnerAccess: false },
+        "user-1",
+      );
+
+      const denied = await store.get(id, "user-1");
+      expect(denied).toBeNull();
+
+      const allowed = await store.get(id, { accessorId: "svc-reader", accessorType: "service" });
+      expect(allowed).toBe("secret");
+    });
+
+    it("prevents non-owner policy updates", async () => {
+      const id = await store.store(makeMetadata(), "secret");
+      await expect(store.setAccessPolicy(id, { readers: ["x"] }, "user-2")).rejects.toThrow(
+        "Only owner",
+      );
+    });
+  });
+
   describe("delete", () => {
     it("removes the credential", async () => {
       const id = await store.store(makeMetadata(), "secret");
@@ -243,14 +284,40 @@ describe("credential-store", () => {
 
   describe("getStaleCredentials", () => {
     it("returns credentials not rotated in max age days", async () => {
-      // Store a credential - it will have createdAt set to now
       await store.store(makeMetadata({ name: "Fresh" }), "s1");
-
-      // Get stale credentials (older than 90 days)
       const stale = await store.getStaleCredentials(90);
-
-      // The fresh one shouldn't be stale
       expect(stale).toHaveLength(0);
+    });
+
+    it("supports explicit rotation periods", async () => {
+      const id = await store.store(makeMetadata({ rotationPeriodDays: -1 }), "s1");
+      const stale = await store.getStaleCredentials(999);
+      expect(stale.some((c) => c.name === "Test Credential")).toBe(true);
+
+      await store.rotate(id, "new", "user-1");
+      const staleAfterRotate = await store.getStaleCredentials(999);
+      expect(staleAfterRotate.some((c) => c.name === "Test Credential")).toBe(true);
+    });
+  });
+
+  describe("audit integration", () => {
+    it("writes security audit events for secret lifecycle", async () => {
+      const audit = new InMemoryAuditStorage();
+      await audit.init();
+      const auditableStore = new InMemoryCredentialStore(new TestEncryptionProvider(), audit);
+      await auditableStore.init();
+
+      const id = await auditableStore.store(makeMetadata(), "secret");
+      await auditableStore.get(id, "user-1");
+      await auditableStore.rotate(id, "secret2", "user-1");
+      await auditableStore.revoke(id, "user-1");
+
+      const page = await audit.query({ category: "security" });
+      const actions = page.entries.map((e) => e.action);
+      expect(actions).toContain("credential.create");
+      expect(actions).toContain("credential.read");
+      expect(actions).toContain("credential.rotate");
+      expect(actions).toContain("credential.revoke");
     });
   });
 

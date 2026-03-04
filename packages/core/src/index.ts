@@ -66,6 +66,8 @@ export {
   PriceUnavailableError,
 } from "./cost-conversion.js";
 export type {
+  AttributionAggregate,
+  AttributionDimension,
   BudgetAlert,
   CostCap,
   CostSummary,
@@ -79,11 +81,14 @@ export type {
   UsageEventType,
 } from "./cost-schema.js";
 export {
+  AttributionDimensionSchema,
   aggregateUsage,
+  aggregateUsageByAttribution,
   BudgetAlertSchema,
   CostCapSchema,
   CostSummarySchema,
   calculateLlmCost,
+  getAttributionValue,
   isCostCapExceeded,
   LlmUsageSchema,
   McpInvocationUsageSchema,
@@ -222,6 +227,7 @@ export type {
   McpTransport,
   McpValidationResult,
   McpVersionPin,
+  NormalizeMcpServerOptions,
   OrphanCheckResult,
 } from "./mcp-schema.js";
 export {
@@ -236,8 +242,10 @@ export {
   McpServerSchema,
   McpTransportSchema,
   McpVersionPinSchema,
+  normalizeMcpServerCredentials,
   parseServerId,
   resolveEffectiveServers,
+  resolveMcpCredentialValue,
   validateMcpServer,
 } from "./mcp-schema.js";
 export type { FieldIssue } from "./parse.js";
@@ -579,6 +587,7 @@ export {
 } from "./usage-collector.js";
 export type {
   AggregatedUsage,
+  MultiDimensionUsageSummary,
   PaginatedResult,
   PaginationOptions,
   TimeBucket,

@@ -96,7 +96,7 @@ class DefaultUsageCollector implements UsageCollector {
 
   constructor(options: UsageCollectorOptions) {
     this.storage = options.storage;
-    this.defaultAttribution = options.defaultAttribution ?? {};
+    this.defaultAttribution = this.normalizeAttribution(options.defaultAttribution ?? {});
     this.now = options.now ?? (() => new Date());
     this.idFactory =
       options.idFactory ?? (() => `evt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
@@ -111,7 +111,10 @@ class DefaultUsageCollector implements UsageCollector {
       id: this.idFactory(),
       type,
       timestamp: this.now().toISOString(),
-      attribution: { ...this.defaultAttribution, ...(attribution ?? {}) },
+      attribution: this.normalizeAttribution({
+        ...this.defaultAttribution,
+        ...(attribution ?? {}),
+      }),
       data,
     });
 
@@ -125,13 +128,27 @@ class DefaultUsageCollector implements UsageCollector {
         id: this.idFactory(),
         type: event.type,
         timestamp: this.now().toISOString(),
-        attribution: { ...this.defaultAttribution, ...(event.attribution ?? {}) },
+        attribution: this.normalizeAttribution({
+          ...this.defaultAttribution,
+          ...(event.attribution ?? {}),
+        }),
         data: event.data,
       }),
     );
 
     await this.storage.storeBatch(normalized);
     return normalized;
+  }
+
+  private normalizeAttribution(attribution: UsageAttribution): UsageAttribution {
+    const developerId = attribution.developerId ?? attribution.userId;
+    const userId = attribution.userId ?? attribution.developerId;
+
+    return {
+      ...attribution,
+      developerId,
+      userId,
+    };
   }
 
   collectLlmCall(data: LlmUsage, attribution?: UsageAttribution): Promise<UsageEvent> {

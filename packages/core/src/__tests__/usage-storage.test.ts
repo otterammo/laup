@@ -204,6 +204,44 @@ describe("usage-storage", () => {
       const result = await storage.summarize({}, "userId");
       expect(result[0]?.value).toBe("large");
     });
+
+    it("supports multi-dimension summaries", async () => {
+      await storage.store(
+        makeEvent({
+          attribution: {
+            developerId: "dev-1",
+            teamId: "team-a",
+            projectId: "project-a",
+            skillId: "skill-a",
+            orgId: "org-1",
+          },
+          data: makeLlmData({ inputTokens: 100, outputTokens: 100 }),
+        }),
+      );
+      await storage.store(
+        makeEvent({
+          attribution: {
+            developerId: "dev-1",
+            teamId: "team-a",
+            projectId: "project-a",
+            skillId: "skill-a",
+            orgId: "org-1",
+          },
+          data: makeLlmData({ inputTokens: 50, outputTokens: 50 }),
+        }),
+      );
+
+      const result = await storage.summarizeByDimensions({}, [
+        "developerId",
+        "teamId",
+        "projectId",
+        "skillId",
+      ]);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.dimensions["developerId"]).toBe("dev-1");
+      expect(result[0]?.totalTokens).toBe(300);
+      expect(result[0]?.eventCount).toBe(2);
+    });
   });
 
   describe("prune", () => {

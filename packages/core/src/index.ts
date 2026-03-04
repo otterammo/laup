@@ -54,6 +54,17 @@ export {
   TieredCache,
 } from "./cache.js";
 export type {
+  ClaudeCodeSerializerInput,
+  ClaudeCodeTaskContext,
+  CursorEditorSelection,
+  CursorNotepad,
+  CursorSerializerInput,
+} from "./context-packet-serializers.js";
+export {
+  serializeClaudeCodeContext,
+  serializeCursorContext,
+} from "./context-packet-serializers.js";
+export type {
   FallbackPricing,
   LlmCostBreakdown,
   MissingPriceStrategy,

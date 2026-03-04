@@ -137,6 +137,12 @@ export const UsageAttributionSchema = z.object({
   /** Session ID */
   sessionId: z.string().optional(),
 
+  /** Emitting adapter identifier */
+  adapterId: z.string().optional(),
+
+  /** Emitting adapter/tool category */
+  toolCategory: z.string().optional(),
+
   /** Business unit / cost center (COST-011) */
   costCenter: z.string().optional(),
 });

@@ -114,6 +114,20 @@ export {
 export type { PolicyMatchContext } from "./policy-matcher.js";
 export { matchesGlob, matchesRule } from "./policy-matcher.js";
 export type {
+  DenialSpikeWindow,
+  PolicyNotification,
+  PolicyNotificationAggregationConfig,
+  PolicyNotificationAggregationInput,
+  PolicyNotificationSeverity,
+} from "./policy-notifications.js";
+export {
+  createPolicyNotificationAggregator,
+  DenialSpikeWindowSchema,
+  PolicyNotificationAggregator,
+  PolicyNotificationSchema,
+  PolicyNotificationSeveritySchema,
+} from "./policy-notifications.js";
+export type {
   PolicyCondition as CanonicalPolicyCondition,
   PolicyDocument as CanonicalPolicyDocument,
   PolicyEffect as CanonicalPolicyEffect,

@@ -263,14 +263,20 @@ export {
 } from "./mcp-versioning.js";
 export type {
   MemoryContext,
+  MemoryEmbeddingProvider,
   MemoryReadOptions,
   MemoryRecord,
   MemoryScope,
+  MemorySearchOptions,
+  MemorySearchResult,
   MemoryStore,
+  MemoryStoreRuntimeOptions,
   MemoryWriteInput,
 } from "./memory-store.js";
 export {
+  cosineSimilarity,
   createMemoryStore,
+  createSemanticMemoryStore,
   InMemoryMemoryStore,
   SqlMemoryStore,
 } from "./memory-store.js";

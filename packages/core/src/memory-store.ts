@@ -1,5 +1,6 @@
 /**
  * Context & memory storage with scoped visibility (MEM-001).
+ * Semantic retrieval support (MEM-002).
  */
 
 import type { DbAdapter } from "./db-adapter.js";
@@ -10,6 +11,10 @@ export interface MemoryContext {
   orgId: string;
   projectId?: string;
   sessionId?: string;
+}
+
+export interface MemoryEmbeddingProvider {
+  embed(input: string, options?: { model?: string }): Promise<number[]>;
 }
 
 export interface MemoryRecord {
@@ -23,6 +28,8 @@ export interface MemoryRecord {
   createdAt: string;
   expiresAt?: string;
   metadata?: Record<string, unknown>;
+  embedding?: number[];
+  embeddingModel?: string;
 }
 
 export interface MemoryWriteInput {
@@ -32,6 +39,7 @@ export interface MemoryWriteInput {
   scope: MemoryScope;
   context: MemoryContext;
   metadata?: Record<string, unknown>;
+  embeddingModel?: string;
   now?: Date;
 }
 
@@ -40,9 +48,22 @@ export interface MemoryReadOptions {
   now?: Date;
 }
 
+export interface MemorySearchOptions {
+  includeSharedFromBroaderScopes?: boolean;
+  now?: Date;
+  k?: number;
+  embeddingModel?: string;
+}
+
+export interface MemorySearchResult {
+  memory: MemoryRecord;
+  score: number;
+}
+
 export interface MemoryStore {
   init(): Promise<void>;
   write(input: MemoryWriteInput): Promise<MemoryRecord>;
+  writeBatch(inputs: MemoryWriteInput[]): Promise<MemoryRecord[]>;
   listByScope(
     scope: MemoryScope,
     context: MemoryContext,
@@ -58,10 +79,18 @@ export interface MemoryStore {
     context: MemoryContext,
     options?: MemoryReadOptions,
   ): Promise<MemoryRecord | null>;
+  semanticSearch(
+    query: string,
+    scope: MemoryScope,
+    context: MemoryContext,
+    options?: MemorySearchOptions,
+  ): Promise<MemorySearchResult[]>;
   pruneExpired(now?: Date): Promise<number>;
 }
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_TOP_K = 10;
+const DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small";
 
 function randomId(): string {
   return `mem_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -116,15 +145,62 @@ function canRead(
   return true;
 }
 
+class DefaultMemoryEmbeddingProvider implements MemoryEmbeddingProvider {
+  async embed(input: string): Promise<number[]> {
+    const out = [0, 0, 0, 0, 0, 0, 0, 0];
+    const text = input.toLowerCase();
+    for (let i = 0; i < text.length; i += 1) {
+      const code = text.charCodeAt(i);
+      out[i % out.length] = (out[i % out.length] ?? 0) + (code % 31) / 31;
+    }
+    return out;
+  }
+}
+
+export interface MemoryStoreRuntimeOptions {
+  embeddingProvider?: MemoryEmbeddingProvider;
+  defaultEmbeddingModel?: string;
+  defaultTopK?: number;
+}
+
+export function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length === 0 || b.length === 0 || a.length !== b.length) return 0;
+
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    const av = a[i] ?? 0;
+    const bv = b[i] ?? 0;
+    dot += av * bv;
+    normA += av * av;
+    normB += bv * bv;
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
 export class InMemoryMemoryStore implements MemoryStore {
   private records = new Map<string, MemoryRecord>();
   private keyToId = new Map<string, string>();
+  private embeddingProvider: MemoryEmbeddingProvider;
+  private defaultEmbeddingModel: string;
+  private defaultTopK: number;
 
-  private makeKeyIndex(orgId: string, key: string): string {
-    return `${orgId}:${key}`;
+  constructor(options?: MemoryStoreRuntimeOptions) {
+    this.embeddingProvider = options?.embeddingProvider ?? new DefaultMemoryEmbeddingProvider();
+    this.defaultEmbeddingModel = options?.defaultEmbeddingModel ?? DEFAULT_EMBEDDING_MODEL;
+    this.defaultTopK = Math.max(1, options?.defaultTopK ?? DEFAULT_TOP_K);
   }
 
   async init(): Promise<void> {}
+
+  private makeKeyIndex(
+    context: Pick<MemoryRecord, "orgId" | "projectId" | "sessionId">,
+    key: string,
+  ): string {
+    return `${context.orgId}::${key}`;
+  }
 
   async write(input: MemoryWriteInput): Promise<MemoryRecord> {
     const id = input.id ?? randomId();
@@ -141,35 +217,46 @@ export class InMemoryMemoryStore implements MemoryStore {
         ? new Date(now.getTime() + SESSION_TTL_MS).toISOString()
         : undefined;
 
-    const key = input.key ?? existing?.key;
-    if (key) {
-      const keyIndex = this.makeKeyIndex(scopeContext.orgId, key);
+    const nextKey = input.key ?? existing?.key;
+    if (nextKey) {
+      const keyIndex = this.makeKeyIndex(scopeContext, nextKey);
       const currentId = this.keyToId.get(keyIndex);
       if (currentId && currentId !== id) {
-        throw new Error(`Memory key is already in use for org ${scopeContext.orgId}: ${key}`);
+        throw new Error(`Memory key is already in use in this scope: ${nextKey}`);
       }
     }
 
+    const embeddingModel = input.embeddingModel ?? this.defaultEmbeddingModel;
+    const embedding = await this.embeddingProvider.embed(input.content, { model: embeddingModel });
+
     const record: MemoryRecord = {
       id,
-      ...(key ? { key } : {}),
+      ...(nextKey ? { key: nextKey } : {}),
       content: input.content,
       scope: input.scope,
       createdAt: existing?.createdAt ?? now.toISOString(),
+      embedding,
+      embeddingModel,
       ...scopeContext,
       ...(expiresAt ? { expiresAt } : {}),
       ...(input.metadata ? { metadata: input.metadata } : {}),
     };
 
-    if (existing?.key && existing.key !== key) {
-      this.keyToId.delete(this.makeKeyIndex(existing.orgId, existing.key));
+    if (existing?.key && existing.key !== nextKey) {
+      this.keyToId.delete(this.makeKeyIndex(existing, existing.key));
     }
-    if (key) {
-      this.keyToId.set(this.makeKeyIndex(scopeContext.orgId, key), id);
+    if (nextKey) {
+      this.keyToId.set(this.makeKeyIndex(scopeContext, nextKey), id);
     }
 
     this.records.set(id, record);
     return record;
+  }
+
+  async writeBatch(inputs: MemoryWriteInput[]): Promise<MemoryRecord[]> {
+    const out: MemoryRecord[] = [];
+    for (const input of inputs) out.push(await this.write(input));
+    return out;
   }
 
   async listByScope(
@@ -209,9 +296,52 @@ export class InMemoryMemoryStore implements MemoryStore {
     context: MemoryContext,
     options?: MemoryReadOptions,
   ): Promise<MemoryRecord | null> {
-    const id = this.keyToId.get(this.makeKeyIndex(context.orgId, key));
-    if (!id) return null;
-    return this.getById(id, context, options);
+    const sessionContext: Pick<MemoryRecord, "orgId" | "projectId" | "sessionId"> = {
+      orgId: context.orgId,
+      ...(context.projectId ? { projectId: context.projectId } : {}),
+      ...(context.sessionId ? { sessionId: context.sessionId } : {}),
+    };
+    const projectContext: Pick<MemoryRecord, "orgId" | "projectId" | "sessionId"> = {
+      orgId: context.orgId,
+      ...(context.projectId ? { projectId: context.projectId } : {}),
+    };
+    const orgContext: Pick<MemoryRecord, "orgId" | "projectId" | "sessionId"> = {
+      orgId: context.orgId,
+    };
+
+    const sessionScopedId = this.keyToId.get(this.makeKeyIndex(sessionContext, key));
+    if (sessionScopedId) return this.getById(sessionScopedId, context, options);
+
+    const projectScopedId = this.keyToId.get(this.makeKeyIndex(projectContext, key));
+    if (projectScopedId) return this.getById(projectScopedId, context, options);
+
+    const orgScopedId = this.keyToId.get(this.makeKeyIndex(orgContext, key));
+    if (orgScopedId) return this.getById(orgScopedId, context, options);
+
+    return null;
+  }
+
+  async semanticSearch(
+    query: string,
+    scope: MemoryScope,
+    context: MemoryContext,
+    options?: MemorySearchOptions,
+  ): Promise<MemorySearchResult[]> {
+    const now = options?.now ?? new Date();
+    const includeShared = options?.includeSharedFromBroaderScopes ?? false;
+    const k = Math.max(1, options?.k ?? this.defaultTopK);
+    const model = options?.embeddingModel ?? this.defaultEmbeddingModel;
+    const queryEmbedding = await this.embeddingProvider.embed(query, { model });
+
+    return Array.from(this.records.values())
+      .filter((record) => !isExpired(record, now))
+      .filter((record) => canRead(record, scope, context, includeShared))
+      .map((memory) => ({
+        memory,
+        score: cosineSimilarity(queryEmbedding, memory.embedding ?? []),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, k);
   }
 
   async pruneExpired(now = new Date()): Promise<number> {
@@ -220,7 +350,7 @@ export class InMemoryMemoryStore implements MemoryStore {
       if (isExpired(record, now)) {
         this.records.delete(id);
         if (record.key) {
-          this.keyToId.delete(this.makeKeyIndex(record.orgId, record.key));
+          this.keyToId.delete(this.makeKeyIndex(record, record.key));
         }
         removed += 1;
       }
@@ -238,12 +368,25 @@ interface MemoryRow {
   project_id: string | null;
   session_id: string | null;
   metadata: string | null;
+  embedding: string | null;
+  embedding_model: string | null;
   created_at: string;
   expires_at: string | null;
 }
 
 export class SqlMemoryStore implements MemoryStore {
-  constructor(private db: DbAdapter) {}
+  private embeddingProvider: MemoryEmbeddingProvider;
+  private defaultEmbeddingModel: string;
+  private defaultTopK: number;
+
+  constructor(
+    private db: DbAdapter,
+    options?: MemoryStoreRuntimeOptions,
+  ) {
+    this.embeddingProvider = options?.embeddingProvider ?? new DefaultMemoryEmbeddingProvider();
+    this.defaultEmbeddingModel = options?.defaultEmbeddingModel ?? DEFAULT_EMBEDDING_MODEL;
+    this.defaultTopK = Math.max(1, options?.defaultTopK ?? DEFAULT_TOP_K);
+  }
 
   async init(): Promise<void> {
     await this.db.execute(`
@@ -256,6 +399,8 @@ export class SqlMemoryStore implements MemoryStore {
         project_id TEXT,
         session_id TEXT,
         metadata TEXT,
+        embedding TEXT,
+        embedding_model TEXT,
         created_at TEXT NOT NULL,
         expires_at TEXT
       )
@@ -264,7 +409,9 @@ export class SqlMemoryStore implements MemoryStore {
     await this.db.execute(`CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope)`);
     await this.db.execute(`CREATE INDEX IF NOT EXISTS idx_memories_org ON memories(org_id)`);
     await this.db.execute(
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_org_key_unique ON memories(org_id, key) WHERE key IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_org_key_unique
+       ON memories(org_id, key)
+       WHERE key IS NOT NULL`,
     );
     await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id)`,
@@ -296,9 +443,12 @@ export class SqlMemoryStore implements MemoryStore {
     const createdAt = existing?.created_at ?? now.toISOString();
     const key = input.key ?? existing?.key ?? null;
 
+    const embeddingModel = input.embeddingModel ?? this.defaultEmbeddingModel;
+    const embedding = await this.embeddingProvider.embed(input.content, { model: embeddingModel });
+
     await this.db.execute(
-      `INSERT OR REPLACE INTO memories (id, key, content, scope, org_id, project_id, session_id, metadata, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO memories (id, key, content, scope, org_id, project_id, session_id, metadata, embedding, embedding_model, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         key,
@@ -308,6 +458,8 @@ export class SqlMemoryStore implements MemoryStore {
         scopeContext.projectId ?? null,
         scopeContext.sessionId ?? null,
         input.metadata ? JSON.stringify(input.metadata) : null,
+        JSON.stringify(embedding),
+        embeddingModel,
         createdAt,
         expiresAt,
       ],
@@ -324,7 +476,15 @@ export class SqlMemoryStore implements MemoryStore {
       createdAt,
       ...(expiresAt ? { expiresAt } : {}),
       ...(input.metadata ? { metadata: input.metadata } : {}),
+      embedding,
+      embeddingModel,
     };
+  }
+
+  async writeBatch(inputs: MemoryWriteInput[]): Promise<MemoryRecord[]> {
+    const out: MemoryRecord[] = [];
+    for (const input of inputs) out.push(await this.write(input));
+    return out;
   }
 
   async listByScope(
@@ -347,7 +507,7 @@ export class SqlMemoryStore implements MemoryStore {
     const params: (string | null)[] = [context.orgId, ...allowedScopes, now];
 
     let query = `
-      SELECT id, key, content, scope, org_id, project_id, session_id, metadata, created_at, expires_at
+      SELECT id, key, content, scope, org_id, project_id, session_id, metadata, embedding, embedding_model, created_at, expires_at
       FROM memories
       WHERE org_id = ?
         AND scope IN (${placeholders})
@@ -379,7 +539,7 @@ export class SqlMemoryStore implements MemoryStore {
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
 
     const row = await this.db.queryOne<MemoryRow>(
-      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, created_at, expires_at
+      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, embedding, embedding_model, created_at, expires_at
        FROM memories
        WHERE id = ?`,
       [id],
@@ -407,10 +567,32 @@ export class SqlMemoryStore implements MemoryStore {
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
 
     const row = await this.db.queryOne<MemoryRow>(
-      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, created_at, expires_at
+      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, embedding, embedding_model, created_at, expires_at
        FROM memories
-       WHERE org_id = ? AND key = ?`,
-      [context.orgId, key],
+       WHERE org_id = ?
+         AND key = ?
+         AND (
+           (project_id = ? AND session_id = ?)
+           OR (project_id = ? AND session_id IS NULL)
+           OR (project_id IS NULL AND session_id IS NULL)
+         )
+       ORDER BY
+         CASE
+           WHEN project_id = ? AND session_id = ? THEN 0
+           WHEN project_id = ? AND session_id IS NULL THEN 1
+           ELSE 2
+         END
+       LIMIT 1`,
+      [
+        context.orgId,
+        key,
+        context.projectId ?? null,
+        context.sessionId ?? null,
+        context.projectId ?? null,
+        context.projectId ?? null,
+        context.sessionId ?? null,
+        context.projectId ?? null,
+      ],
     );
 
     if (!row) return null;
@@ -424,6 +606,26 @@ export class SqlMemoryStore implements MemoryStore {
       canRead(record, "org", context, includeShared);
 
     return canReadAtAnyScope ? record : null;
+  }
+
+  async semanticSearch(
+    query: string,
+    scope: MemoryScope,
+    context: MemoryContext,
+    options?: MemorySearchOptions,
+  ): Promise<MemorySearchResult[]> {
+    const k = Math.max(1, options?.k ?? this.defaultTopK);
+    const model = options?.embeddingModel ?? this.defaultEmbeddingModel;
+    const queryEmbedding = await this.embeddingProvider.embed(query, { model });
+    const visible = await this.listByScope(scope, context, options);
+
+    return visible
+      .map((memory) => ({
+        memory,
+        score: cosineSimilarity(queryEmbedding, memory.embedding ?? []),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, k);
   }
 
   async pruneExpired(now = new Date()): Promise<number> {
@@ -440,6 +642,9 @@ export class SqlMemoryStore implements MemoryStore {
         ? (JSON.parse(metadataRaw) as Record<string, unknown>)
         : undefined;
 
+    const embedding =
+      typeof row.embedding === "string" ? (JSON.parse(row.embedding) as number[]) : undefined;
+
     return {
       id: String(row.id),
       ...(row.key ? { key: String(row.key) } : {}),
@@ -451,10 +656,16 @@ export class SqlMemoryStore implements MemoryStore {
       createdAt: String(row.created_at),
       ...(row.expires_at ? { expiresAt: String(row.expires_at) } : {}),
       ...(metadata ? { metadata } : {}),
+      ...(embedding ? { embedding } : {}),
+      ...(row.embedding_model ? { embeddingModel: String(row.embedding_model) } : {}),
     };
   }
 }
 
 export function createMemoryStore(db: DbAdapter): MemoryStore {
   return new SqlMemoryStore(db);
+}
+
+export function createSemanticMemoryStore(options?: MemoryStoreRuntimeOptions): MemoryStore {
+  return new InMemoryMemoryStore(options);
 }

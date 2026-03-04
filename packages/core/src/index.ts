@@ -166,12 +166,27 @@ export {
   Migrator,
 } from "./db-migrations.js";
 export type {
+  HandoffRoutingCandidate,
+  HandoffRoutingDecision as ResolvedHandoffRoutingDecision,
+  HandoffRoutingPolicyConfig,
+  ResolveHandoffRoutingInput,
+  ScopedHandoffRoutingPolicy,
+} from "./handoff-routing.js";
+export {
+  HandoffRoutingCandidateSchema,
+  HandoffRoutingPolicyConfigSchema,
+  mergeHandoffRoutingPolicy,
+  resolveHandoffRouting,
+  ScopedHandoffRoutingPolicySchema,
+} from "./handoff-routing.js";
+export type {
   ContextField,
   ContextPacket,
   HandoffAck,
   HandoffHistoryEntry,
   HandoffMode,
   HandoffRouting,
+  HandoffRoutingDecision,
   HandoffStatus,
   HandoffTemplate,
   SecurityValidationResult,
@@ -184,6 +199,7 @@ export {
   HandoffAckSchema,
   HandoffHistoryEntrySchema,
   HandoffModeSchema,
+  HandoffRoutingDecisionSchema,
   HandoffRoutingSchema,
   HandoffStatusSchema,
   HandoffTemplateSchema,

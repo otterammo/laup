@@ -40,3 +40,9 @@ The format is machine-validatable via Zod schema:
 - `ContextPacketSchema.parse(packet)`
 
 This satisfies the HAND-001 requirement for a structured, serializable/deserializable packet format.
+
+## Routing and History
+
+For routing behavior (HAND-007), see `docs/handoff-routing.md`.
+
+Handoff history entries can include a `routingDecision` record to capture how the receiving tool was selected.

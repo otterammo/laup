@@ -262,6 +262,10 @@ export {
   evaluateMcpVersion,
 } from "./mcp-versioning.js";
 export type {
+  MemoryConflict,
+  MemoryConflictListOptions,
+  MemoryConflictResolutionAction,
+  MemoryConflictResolutionStrategy,
   MemoryContext,
   MemoryEmbeddingProvider,
   MemoryReadOptions,
@@ -278,6 +282,7 @@ export {
   createMemoryStore,
   createSemanticMemoryStore,
   InMemoryMemoryStore,
+  MemoryConflictError,
   SqlMemoryStore,
 } from "./memory-store.js";
 export type { FieldIssue } from "./parse.js";

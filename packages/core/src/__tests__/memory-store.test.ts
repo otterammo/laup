@@ -159,7 +159,117 @@ describe("memory-store", () => {
     expect(await store.getByKey("does_not_exist", context)).toBeNull();
   });
 
-  it("rejects duplicate keys in the same org", async () => {
+  it("uses last-write-wins by default for duplicate keys", async () => {
+    await store.write({
+      id: "one",
+      key: "shared-key",
+      content: "first",
+      scope: "project",
+      context,
+    });
+
+    const written = await store.write({
+      id: "two",
+      key: "shared-key",
+      content: "second",
+      scope: "project",
+      context,
+    });
+
+    expect(written.id).toBe("one");
+    expect((await store.getByKey("shared-key", context))?.content).toBe("second");
+  });
+
+  it("supports first-write-wins strategy", async () => {
+    const firstWinsStore = new InMemoryMemoryStore({
+      conflictResolutionStrategy: "first-write-wins",
+    });
+    await firstWinsStore.init();
+
+    await firstWinsStore.write({
+      id: "one",
+      key: "shared-key",
+      content: "first",
+      scope: "project",
+      context,
+    });
+
+    await expect(
+      firstWinsStore.write({
+        id: "two",
+        key: "shared-key",
+        content: "second",
+        scope: "project",
+        context,
+      }),
+    ).rejects.toThrow(/already in use/i);
+  });
+
+  it("supports manual-review strategy and conflict queue", async () => {
+    const manualStore = new InMemoryMemoryStore({
+      conflictResolutionStrategy: "manual-review",
+    });
+    await manualStore.init();
+
+    await manualStore.write({
+      id: "one",
+      key: "shared-key",
+      content: "first",
+      scope: "project",
+      context,
+    });
+
+    await expect(
+      manualStore.write({
+        id: "two",
+        key: "shared-key",
+        content: "second",
+        scope: "project",
+        context,
+      }),
+    ).rejects.toThrow(/manual review/i);
+
+    const pending = await manualStore.listConflicts(context, { status: "pending" });
+    expect(pending).toHaveLength(1);
+
+    await manualStore.resolveConflict(pending[0]?.id ?? "", "accept-incoming", context);
+    expect((await manualStore.getByKey("shared-key", context))?.content).toBe("second");
+  });
+
+  it("allows per-project conflict strategy overrides", async () => {
+    const scopedStore = new InMemoryMemoryStore({
+      conflictResolutionStrategy: "last-write-wins",
+      conflictResolutionByProject: (ctx) =>
+        ctx.projectId === "project-strict" ? "first-write-wins" : undefined,
+    });
+    await scopedStore.init();
+
+    const strictContext: MemoryContext = {
+      orgId: "org-1",
+      projectId: "project-strict",
+      sessionId: "session-1",
+    };
+
+    await scopedStore.write({
+      id: "strict-1",
+      key: "dup",
+      content: "first",
+      scope: "project",
+      context: strictContext,
+    });
+
+    await expect(
+      scopedStore.write({
+        id: "strict-2",
+        key: "dup",
+        content: "second",
+        scope: "project",
+        context: strictContext,
+      }),
+    ).rejects.toThrow(/already in use/i);
+  });
+
+  it("still rejects duplicate keys across different scopes", async () => {
     await store.write({
       id: "one",
       key: "shared-key",
@@ -176,7 +286,7 @@ describe("memory-store", () => {
         scope: "org",
         context,
       }),
-    ).rejects.toThrow(/already in use|unique/i);
+    ).rejects.toThrow(/different scope|already in use|unique/i);
   });
 
   it("records an audit trail for memory operations", async () => {
@@ -200,6 +310,16 @@ describe("memory-store", () => {
     await auditedStore.listByScope("project", context);
     await auditedStore.getById("audited-memory", context);
     await auditedStore.getByKey("checklist", context);
+    await expect(
+      auditedStore.write({
+        id: "audited-memory-2",
+        key: "checklist",
+        content: "Conflicting write",
+        scope: "project",
+        context,
+      }),
+    ).resolves.toBeDefined();
+
     await auditedStore.pruneExpired(new Date("2030-01-01T00:00:00.000Z"));
 
     const page = await auditStorage.query({ category: "memory", actor: "tester" }, 50, 0);
@@ -211,5 +331,6 @@ describe("memory-store", () => {
     expect(actions).toContain("memory.getById");
     expect(actions).toContain("memory.getByKey");
     expect(actions).toContain("memory.pruneExpired");
+    expect(actions).toContain("memory.conflict");
   });
 });

@@ -36,11 +36,10 @@ export interface Mem0SearchResult {
 }
 
 export interface Mem0ContextResolver {
-  resolve(params: {
-    user_id?: string;
-    agent_id?: string;
-    run_id?: string;
-  }): { context: MemoryContext; scope?: MemoryScope };
+  resolve(params: { user_id?: string; agent_id?: string; run_id?: string }): {
+    context: MemoryContext;
+    scope?: MemoryScope;
+  };
 }
 
 export interface Mem0CompatibleMemoryClient {
@@ -141,7 +140,9 @@ export class Mem0MemoryClient implements Mem0CompatibleMemoryClient {
     return filtered;
   }
 
-  async delete(memoryIdOrParams: string | Mem0DeleteParams): Promise<{ id: string; deleted: boolean }> {
+  async delete(
+    memoryIdOrParams: string | Mem0DeleteParams,
+  ): Promise<{ id: string; deleted: boolean }> {
     const input =
       typeof memoryIdOrParams === "string"
         ? ({ memory_id: memoryIdOrParams } satisfies Mem0DeleteParams)

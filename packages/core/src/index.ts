@@ -523,8 +523,11 @@ export type { SkillRenderer } from "./skill-renderer.js";
 export {
   AiderSkillRenderer,
   ClaudeCodeSkillRenderer,
+  CodexSkillRenderer,
+  CopilotSkillRenderer,
   CursorSkillRenderer,
   getSkillRenderer,
+  OpenCodeSkillRenderer,
   renderSkillToAllTools,
   skillRenderers,
 } from "./skill-renderer.js";

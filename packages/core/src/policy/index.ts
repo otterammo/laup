@@ -20,6 +20,19 @@ export {
   PreActionVetoError,
 } from "./action-hooks.js";
 export type {
+  ActionTaxonomy,
+  ActionTaxonomyIndex,
+  ActionTaxonomyNode,
+  ActionTaxonomyValidationResult,
+} from "./action-taxonomy.js";
+export {
+  ActionTaxonomyNodeSchema,
+  ActionTaxonomySchema,
+  createActionTaxonomyIndex,
+  resolveTaxonomyActionMatches,
+  validateActionTaxonomy,
+} from "./action-taxonomy.js";
+export type {
   ApprovalDecisionStatus,
   ApprovalEnforcementStatus,
   ApprovalGateConfig,
@@ -58,6 +71,24 @@ export {
   EmergencyKillSwitch,
   KillSwitchBlockedError,
 } from "./kill-switch.js";
+export type {
+  PermissionAnomaly,
+  PermissionAnomalyDetectorConfig,
+  PermissionAnomalyReport,
+  PermissionAnomalySeverity,
+  PermissionAnomalyThresholds,
+  PermissionAnomalyType,
+  PermissionAnomalyWindow,
+} from "./permission-anomaly.js";
+export {
+  createPermissionAnomalyDetector,
+  PermissionAnomalyDetector,
+  PermissionAnomalyReportSchema,
+  PermissionAnomalySchema,
+  PermissionAnomalySeveritySchema,
+  PermissionAnomalyTypeSchema,
+  PermissionAnomalyWindowSchema,
+} from "./permission-anomaly.js";
 export type { PermissionAuditLoggerConfig } from "./permission-audit.js";
 export {
   createPermissionAuditLogger,
@@ -103,6 +134,7 @@ export type {
   PolicyCondition,
   PolicyEffect,
   PolicyEvaluatorConfig,
+  PolicyEvaluatorOptions,
   PolicyRiskLevel,
 } from "./policy-evaluator.js";
 export {

@@ -3,23 +3,24 @@
 > Write your project instructions once. Sync them everywhere.
 
 LAUP is a middleware layer that solves configuration fragmentation for teams running multiple
-LLM coding agents. Claude Code, Cursor, and Aider each require their own instruction file
-format. LAUP maintains a single canonical instruction file and propagates it to every tool
-automatically.
+LLM coding agents. Different tools require different instruction file formats, and supported
+tools are extended over time through adapters. LAUP maintains a single canonical instruction
+file and propagates it to every configured tool automatically.
 
 ## The Problem
 
-Running three agents means maintaining three instruction files — `CLAUDE.md`, `.cursorrules`,
-`.aider.conf.yml` — that diverge the moment anyone edits one of them. Teams either accept drift
-or manually synchronize files that should be identical.
+Running multiple agents means maintaining multiple instruction files that diverge the moment
+anyone edits one of them. Teams either accept drift or manually synchronize files that should be
+identical.
 
 ## The Solution
 
 ```text
-laup.md  ->  laup sync  ->  CLAUDE.md
-                       ->  .cursorrules
-                       ->  .cursor/rules/laup.mdc
-                       ->  .aider.conf.yml + CONVENTIONS.md
+laup.md  ->  laup sync  ->  CLAUDE.md                  (Claude Code adapter)
+                        ->  .cursorrules               (Cursor adapter)
+                        ->  .cursor/rules/laup.mdc     (Cursor rules adapter)
+                        ->  .aider.conf.yml + CONVENTIONS.md (Aider adapter)
+                        ->  ...additional adapter outputs
 ```
 
 One source of truth. One command to propagate.

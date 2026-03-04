@@ -226,14 +226,14 @@ export class SqlMemoryStore implements MemoryStore {
       [id],
     );
 
-    if (existing && existing["scope"] !== input.scope) {
+    if (existing && existing.scope !== input.scope) {
       throw new Error(`Memory scope is immutable for id ${id}`);
     }
 
     const scopeContext = buildScopeContext(input.scope, input.context);
     const expiresAt =
       input.scope === "session" ? new Date(now.getTime() + SESSION_TTL_MS).toISOString() : null;
-    const createdAt = existing?.["created_at"] ?? now.toISOString();
+    const createdAt = existing?.created_at ?? now.toISOString();
 
     await this.db.execute(
       `INSERT OR REPLACE INTO memories (id, content, scope, org_id, project_id, session_id, metadata, created_at, expires_at)
@@ -343,21 +343,21 @@ export class SqlMemoryStore implements MemoryStore {
   }
 
   private rowToRecord(row: Record<string, unknown>): MemoryRecord {
-    const metadataRaw = row["metadata"];
+    const metadataRaw = row.metadata;
     const metadata =
       typeof metadataRaw === "string"
         ? (JSON.parse(metadataRaw) as Record<string, unknown>)
         : undefined;
 
     return {
-      id: String(row["id"]),
-      content: String(row["content"]),
-      scope: row["scope"] as MemoryScope,
-      orgId: String(row["org_id"]),
-      ...(row["project_id"] ? { projectId: String(row["project_id"]) } : {}),
-      ...(row["session_id"] ? { sessionId: String(row["session_id"]) } : {}),
-      createdAt: String(row["created_at"]),
-      ...(row["expires_at"] ? { expiresAt: String(row["expires_at"]) } : {}),
+      id: String(row.id),
+      content: String(row.content),
+      scope: row.scope as MemoryScope,
+      orgId: String(row.org_id),
+      ...(row.project_id ? { projectId: String(row.project_id) } : {}),
+      ...(row.session_id ? { sessionId: String(row.session_id) } : {}),
+      createdAt: String(row.created_at),
+      ...(row.expires_at ? { expiresAt: String(row.expires_at) } : {}),
       ...(metadata ? { metadata } : {}),
     };
   }

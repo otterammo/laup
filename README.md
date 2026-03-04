@@ -194,6 +194,8 @@ See [docs/style/markdown-machine-style-guide.md](docs/style/markdown-machine-sty
 for markdown and machine-readable standards.
 See [docs/skill-history.md](docs/skill-history.md) for SKILL-011 installation/usage history
 storage and retention policy.
+See [docs/memory-semantic-retrieval.md](docs/memory-semantic-retrieval.md) for MEM-002
+semantic retrieval behavior and API usage.
 
 ## Roadmap
 

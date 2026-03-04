@@ -192,6 +192,8 @@ pnpm run lint:fix          # Safe autofix + full lint verification
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
 See [docs/style/markdown-machine-style-guide.md](docs/style/markdown-machine-style-guide.md)
 for markdown and machine-readable standards.
+See [docs/skill-history.md](docs/skill-history.md) for SKILL-011 installation/usage history
+storage and retention policy.
 
 ## Roadmap
 

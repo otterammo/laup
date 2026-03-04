@@ -490,6 +490,22 @@ export { mergeScopes, SCOPE_PRECEDENCE, scopePrecedence } from "./scope.js";
 export type { ScopeConfig, ScopeLoadResult } from "./scope-loader.js";
 export { getDefaultScopePath, loadScopedDocument, loadScopes } from "./scope-loader.js";
 export type {
+  RecordSkillInstallInput,
+  RecordSkillUsageInput,
+  SkillHistoryEvent,
+  SkillHistoryEventType,
+  SkillHistoryQuery,
+  SkillHistoryStorage,
+  SkillInstallHistoryEvent,
+  SkillUsageHistoryEvent,
+} from "./skill-history.js";
+export {
+  createSkillHistoryStorage,
+  InMemorySkillHistoryStorage,
+  MIN_SKILL_HISTORY_RETENTION_MONTHS,
+  SqlSkillHistoryStorage,
+} from "./skill-history.js";
+export type {
   InstalledSkill,
   SkillInstallStatus,
   SkillQueryFilter,

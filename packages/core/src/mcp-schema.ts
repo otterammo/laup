@@ -42,8 +42,14 @@ export type McpCredentialRef = z.infer<typeof McpCredentialRefSchema>;
  * MCP server version constraint (MCP-005).
  */
 export const McpVersionPinSchema = z.object({
-  /** Pinned version (semver) */
+  /** Legacy pinned version (semver) */
   version: z.string().optional(),
+
+  /** Preferred explicit pinned version (semver) */
+  pinnedVersion: z.string().optional(),
+
+  /** Semver constraint string (example: ">=1.2.0 <2.0.0") */
+  constraint: z.string().optional(),
 
   /** Minimum version constraint */
   minVersion: z.string().optional(),

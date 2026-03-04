@@ -76,6 +76,8 @@ describe("mcp-schema", () => {
       const result = validateMcpServer({
         ...validStdioServer,
         version: {
+          pinnedVersion: "1.2.3",
+          constraint: ">=1.0.0 <2.0.0",
           minVersion: "1.0.0",
           maxVersion: "2.0.0",
           autoUpdate: true,

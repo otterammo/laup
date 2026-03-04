@@ -237,6 +237,17 @@ export {
   resolveEffectiveServers,
   validateMcpServer,
 } from "./mcp-schema.js";
+export type {
+  McpVersionEvaluation,
+  McpVersionEvaluationInput,
+  McpVersionNotification,
+  McpVersionNotificationType,
+} from "./mcp-versioning.js";
+export {
+  buildMcpVersionConstraint,
+  buildMcpVersionNotifications,
+  evaluateMcpVersion,
+} from "./mcp-versioning.js";
 export type { FieldIssue } from "./parse.js";
 export { ParseError, parseCanonical, parseCanonicalString } from "./parse.js";
 export type {

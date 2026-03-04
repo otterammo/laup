@@ -126,4 +126,55 @@ describe("memory-store", () => {
     });
     expect(otherOrg).toHaveLength(0);
   });
+
+  it("assigns a system ID when omitted and supports exact ID lookup", async () => {
+    const created = await store.write({
+      content: "remember this",
+      scope: "project",
+      context,
+    });
+
+    expect(created.id).toMatch(/^mem_/);
+
+    const fetched = await store.getById(created.id, context);
+    expect(fetched?.id).toBe(created.id);
+  });
+
+  it("supports exact key lookup for memories with explicit keys", async () => {
+    await store.write({
+      id: "project_with_key",
+      key: "deploy-checklist",
+      content: "Run migrations before deploy",
+      scope: "project",
+      context,
+    });
+
+    const byKey = await store.getByKey("deploy-checklist", context);
+    expect(byKey?.id).toBe("project_with_key");
+  });
+
+  it("returns null for non-existent ID or key", async () => {
+    expect(await store.getById("does_not_exist", context)).toBeNull();
+    expect(await store.getByKey("does_not_exist", context)).toBeNull();
+  });
+
+  it("rejects duplicate keys in the same org", async () => {
+    await store.write({
+      id: "one",
+      key: "shared-key",
+      content: "first",
+      scope: "project",
+      context,
+    });
+
+    await expect(
+      store.write({
+        id: "two",
+        key: "shared-key",
+        content: "second",
+        scope: "org",
+        context,
+      }),
+    ).rejects.toThrow(/already in use|unique/i);
+  });
 });

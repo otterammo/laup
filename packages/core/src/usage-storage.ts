@@ -15,7 +15,10 @@ export type TimeBucket = "hour" | "day" | "week" | "month";
  * Usage query filters.
  */
 export interface UsageQueryFilter {
-  /** Filter by user ID */
+  /** Filter by developer ID */
+  developerId?: string;
+
+  /** @deprecated Use developerId */
   userId?: string;
 
   /** Filter by team ID */
@@ -66,6 +69,12 @@ export interface AggregatedUsage {
 export interface UsageSummary {
   dimension: string;
   value: string;
+  totalTokens: number;
+  eventCount: number;
+}
+
+export interface MultiDimensionUsageSummary {
+  dimensions: Record<string, string>;
   totalTokens: number;
   eventCount: number;
 }
@@ -127,6 +136,14 @@ export interface UsageStorage {
   summarize(filter: UsageQueryFilter, dimension: keyof UsageAttribution): Promise<UsageSummary[]>;
 
   /**
+   * Get usage summary grouped by multiple dimensions.
+   */
+  summarizeByDimensions(
+    filter: UsageQueryFilter,
+    dimensions: (keyof UsageAttribution)[],
+  ): Promise<MultiDimensionUsageSummary[]>;
+
+  /**
    * Delete events older than a given date.
    */
   prune(before: Date): Promise<number>;
@@ -145,6 +162,18 @@ function getLlmUsage(event: UsageEvent): LlmUsage | null {
     return event.data as LlmUsage;
   }
   return null;
+}
+
+function getAttributionValue(event: UsageEvent, dimension: keyof UsageAttribution): string {
+  if (dimension === "developerId") {
+    return event.attribution.developerId ?? event.attribution.userId ?? "unknown";
+  }
+
+  if (dimension === "userId") {
+    return event.attribution.userId ?? event.attribution.developerId ?? "unknown";
+  }
+
+  return String(event.attribution[dimension] ?? "unknown");
 }
 
 /**
@@ -227,7 +256,7 @@ export class InMemoryUsageStorage implements UsageStorage {
     const summaries = new Map<string, UsageSummary>();
 
     for (const event of filtered) {
-      const value = event.attribution[dimension] ?? "unknown";
+      const value = getAttributionValue(event, dimension);
       const existing = summaries.get(value) ?? {
         dimension,
         value,
@@ -242,6 +271,37 @@ export class InMemoryUsageStorage implements UsageStorage {
       existing.eventCount++;
 
       summaries.set(value, existing);
+    }
+
+    return Array.from(summaries.values()).sort((a, b) => b.totalTokens - a.totalTokens);
+  }
+
+  async summarizeByDimensions(
+    filter: UsageQueryFilter,
+    dimensions: (keyof UsageAttribution)[],
+  ): Promise<MultiDimensionUsageSummary[]> {
+    const filtered = this.filterEvents(filter);
+    const summaries = new Map<string, MultiDimensionUsageSummary>();
+
+    for (const event of filtered) {
+      const dimensionValues = Object.fromEntries(
+        dimensions.map((dimension) => [dimension, getAttributionValue(event, dimension)]),
+      ) as Record<string, string>;
+      const key = dimensions.map((dimension) => dimensionValues[String(dimension)]).join("::");
+
+      const existing = summaries.get(key) ?? {
+        dimensions: dimensionValues,
+        totalTokens: 0,
+        eventCount: 0,
+      };
+
+      const llmUsage = getLlmUsage(event);
+      if (llmUsage) {
+        existing.totalTokens += llmUsage.inputTokens + llmUsage.outputTokens;
+      }
+      existing.eventCount++;
+
+      summaries.set(key, existing);
     }
 
     return Array.from(summaries.values()).sort((a, b) => b.totalTokens - a.totalTokens);
@@ -268,7 +328,9 @@ export class InMemoryUsageStorage implements UsageStorage {
 
   private filterEvents(filter: UsageQueryFilter): UsageEvent[] {
     return Array.from(this.events.values()).filter((event) => {
-      if (filter.userId && event.attribution.userId !== filter.userId) return false;
+      const eventDeveloperId = event.attribution.developerId ?? event.attribution.userId;
+      if (filter.developerId && eventDeveloperId !== filter.developerId) return false;
+      if (filter.userId && eventDeveloperId !== filter.userId) return false;
       if (filter.teamId && event.attribution.teamId !== filter.teamId) return false;
       if (filter.projectId && event.attribution.projectId !== filter.projectId) return false;
       if (filter.orgId && event.attribution.orgId !== filter.orgId) return false;
@@ -329,6 +391,7 @@ export class SqlUsageStorage implements UsageStorage {
         type TEXT NOT NULL,
         timestamp TEXT NOT NULL,
         user_id TEXT,
+        developer_id TEXT,
         team_id TEXT,
         project_id TEXT,
         org_id TEXT,
@@ -347,6 +410,9 @@ export class SqlUsageStorage implements UsageStorage {
     );
     await this.db.execute(`CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_events(user_id)`);
     await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_usage_developer ON usage_events(developer_id)`,
+    );
+    await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_usage_project ON usage_events(project_id)`,
     );
   }
@@ -355,13 +421,14 @@ export class SqlUsageStorage implements UsageStorage {
     const id = event.id ?? `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     await this.db.execute(
-      `INSERT INTO usage_events (id, type, timestamp, user_id, team_id, project_id, org_id, skill_id, adapter_id, tool_category, cost_center, data)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO usage_events (id, type, timestamp, user_id, developer_id, team_id, project_id, org_id, skill_id, adapter_id, tool_category, cost_center, data)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         event.type,
         event.timestamp,
         event.attribution.userId ?? null,
+        event.attribution.developerId ?? event.attribution.userId ?? null,
         event.attribution.teamId ?? null,
         event.attribution.projectId ?? null,
         event.attribution.orgId ?? null,
@@ -383,13 +450,14 @@ export class SqlUsageStorage implements UsageStorage {
         const id = event.id ?? `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
         await tx.query(
-          `INSERT INTO usage_events (id, type, timestamp, user_id, team_id, project_id, org_id, skill_id, adapter_id, tool_category, cost_center, data)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO usage_events (id, type, timestamp, user_id, developer_id, team_id, project_id, org_id, skill_id, adapter_id, tool_category, cost_center, data)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             event.type,
             event.timestamp,
             event.attribution.userId ?? null,
+            event.attribution.developerId ?? event.attribution.userId ?? null,
             event.attribution.teamId ?? null,
             event.attribution.projectId ?? null,
             event.attribution.orgId ?? null,
@@ -443,6 +511,14 @@ export class SqlUsageStorage implements UsageStorage {
     _dimension: keyof UsageAttribution,
   ): Promise<UsageSummary[]> {
     // Simplified - real version would GROUP BY dimension
+    return [];
+  }
+
+  async summarizeByDimensions(
+    _filter: UsageQueryFilter,
+    _dimensions: (keyof UsageAttribution)[],
+  ): Promise<MultiDimensionUsageSummary[]> {
+    // Simplified - real version would GROUP BY combined dimensions
     return [];
   }
 

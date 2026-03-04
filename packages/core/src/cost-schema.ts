@@ -122,6 +122,9 @@ export const UsageAttributionSchema = z.object({
   /** Developer/user ID */
   userId: z.string().optional(),
 
+  /** Preferred attribution actor identifier */
+  developerId: z.string().optional(),
+
   /** Team ID */
   teamId: z.string().optional(),
 
@@ -148,6 +151,28 @@ export const UsageAttributionSchema = z.object({
 });
 
 export type UsageAttribution = z.infer<typeof UsageAttributionSchema>;
+
+export const AttributionDimensionSchema = z.enum([
+  "developerId",
+  "userId",
+  "teamId",
+  "projectId",
+  "orgId",
+  "skillId",
+  "sessionId",
+  "adapterId",
+  "toolCategory",
+  "costCenter",
+]);
+
+export type AttributionDimension = z.infer<typeof AttributionDimensionSchema>;
+
+export interface AttributionAggregate {
+  dimension: AttributionDimension;
+  value: string;
+  totalCost: number;
+  eventCount: number;
+}
 
 /**
  * Usage event record (COST-001).
@@ -349,6 +374,49 @@ export function shouldFireAlert(currentCost: number, alert: BudgetAlert): boolea
 /**
  * Aggregate usage events into a cost summary.
  */
+export function getAttributionValue(
+  attribution: UsageAttribution,
+  dimension: AttributionDimension,
+): string {
+  if (dimension === "developerId") {
+    return attribution.developerId ?? attribution.userId ?? "unknown";
+  }
+
+  if (dimension === "userId") {
+    return attribution.userId ?? attribution.developerId ?? "unknown";
+  }
+
+  return String(attribution[dimension] ?? "unknown");
+}
+
+export function aggregateUsageByAttribution(
+  events: UsageEvent[],
+  dimension: AttributionDimension,
+  pricing: Map<string, ModelPricing>,
+): AttributionAggregate[] {
+  const grouped = new Map<string, AttributionAggregate>();
+
+  for (const event of events) {
+    const value = getAttributionValue(event.attribution, dimension);
+    const existing = grouped.get(value) ?? { dimension, value, totalCost: 0, eventCount: 0 };
+
+    let eventCost = 0;
+    if (event.type === "llm-call") {
+      const data = event.data as LlmUsage;
+      const modelPricing = pricing.get(`${data.provider}/${data.model}`);
+      if (modelPricing) {
+        eventCost = calculateLlmCost(data, modelPricing);
+      }
+    }
+
+    existing.totalCost += eventCost;
+    existing.eventCount += 1;
+    grouped.set(value, existing);
+  }
+
+  return Array.from(grouped.values()).sort((a, b) => b.totalCost - a.totalCost);
+}
+
 export function aggregateUsage(
   events: UsageEvent[],
   pricing: Map<string, ModelPricing>,

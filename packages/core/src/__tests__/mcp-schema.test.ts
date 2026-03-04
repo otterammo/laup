@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { InMemoryCredentialStore } from "../credential-store.js";
 import {
   getServersAtScope,
   isServerHealthy,
   type McpHealthState,
   type McpServer,
+  normalizeMcpServerCredentials,
   parseServerId,
   resolveEffectiveServers,
+  resolveMcpCredentialValue,
   validateMcpServer,
 } from "../mcp-schema.js";
 
@@ -64,12 +67,34 @@ describe("mcp-schema", () => {
       const result = validateMcpServer({
         ...validHttpServer,
         credentials: {
-          key: "acme-api-key",
+          key: "cred_123",
           type: "api-key",
           envVar: "ACME_API_KEY",
         },
       });
       expect(result.valid).toBe(true);
+    });
+
+    it("rejects plaintext credentials on top-level", () => {
+      const result = validateMcpServer({
+        ...validHttpServer,
+        apiKey: "plain-secret",
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.issues.some((i) => i.path === "apiKey")).toBe(true);
+    });
+
+    it("rejects plaintext credentials inside credentials object", () => {
+      const result = validateMcpServer({
+        ...validHttpServer,
+        credentials: {
+          apiKey: "plain-secret",
+        },
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.issues.some((i) => i.path === "credentials.apiKey")).toBe(true);
     });
 
     it("validates server with version pinning", () => {
@@ -105,6 +130,57 @@ describe("mcp-schema", () => {
         id: "invalid id with spaces",
       });
       expect(result.valid).toBe(false);
+    });
+  });
+
+  describe("normalizeMcpServerCredentials", () => {
+    it("migrates plaintext credential to credential-store reference", async () => {
+      const store = new InMemoryCredentialStore();
+      await store.init();
+
+      const normalized = await normalizeMcpServerCredentials(
+        {
+          ...validHttpServer,
+          credentials: {
+            apiKey: "shh-secret",
+            envVar: "ACME_API_KEY",
+          },
+        },
+        {
+          credentialStore: store,
+          ownerId: "user-1",
+          ownerType: "user",
+          accessorId: "user-1",
+        },
+      );
+
+      expect(normalized.credentials?.key).toMatch(/^cred_/);
+      expect(normalized.credentials?.envVar).toBe("ACME_API_KEY");
+
+      const resolved = await resolveMcpCredentialValue(normalized, store, "user-1");
+      expect(resolved).toBe("shh-secret");
+    });
+
+    it("passes through existing credential references", async () => {
+      const store = new InMemoryCredentialStore();
+      await store.init();
+
+      const server = {
+        ...validHttpServer,
+        credentials: {
+          key: "cred_existing",
+          type: "api-key",
+        },
+      };
+
+      const normalized = await normalizeMcpServerCredentials(server, {
+        credentialStore: store,
+        ownerId: "user-1",
+        ownerType: "user",
+        accessorId: "user-1",
+      });
+
+      expect(normalized.credentials?.key).toBe("cred_existing");
     });
   });
 

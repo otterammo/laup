@@ -64,6 +64,7 @@ describe("usage-collector", () => {
     for (const event of result.data) {
       expect(event.id).toMatch(/^evt_/);
       expect(event.attribution.userId).toBe("u-1");
+      expect(event.attribution.developerId).toBe("u-1");
       expect(event.attribution.projectId).toBe("p-1");
       expect(event.timestamp).toBe("2026-03-03T21:25:00.000Z");
     }

@@ -289,6 +289,19 @@ export {
   evaluateMcpVersion,
 } from "./mcp-versioning.js";
 export type {
+  Mem0AddParams,
+  Mem0CompatibleMemoryClient,
+  Mem0ContextResolver,
+  Mem0DeleteParams,
+  Mem0Message,
+  Mem0SearchParams,
+  Mem0SearchResult,
+} from "./memory-mem0.js";
+export {
+  DefaultMem0ContextResolver,
+  Mem0MemoryClient,
+} from "./memory-mem0.js";
+export type {
   MemoryConflict,
   MemoryConflictListOptions,
   MemoryConflictResolutionAction,

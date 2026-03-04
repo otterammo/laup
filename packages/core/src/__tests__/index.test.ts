@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ParseError, parseCanonicalString, validateCanonical } from "../index.js";
+import {
+  DefaultMem0ContextResolver,
+  Mem0MemoryClient,
+  ParseError,
+  parseCanonicalString,
+  validateCanonical,
+} from "../index.js";
 
 const fixture = (name: string) =>
   readFileSync(join(import.meta.dirname, "fixtures", name), "utf-8");
@@ -37,6 +43,13 @@ describe("parseCanonicalString", () => {
   it("throws ParseError for malformed YAML frontmatter", () => {
     const malformed = "---\nversion: [unclosed\n---\n\n# Body";
     expect(() => parseCanonicalString(malformed)).toThrow(ParseError);
+  });
+});
+
+describe("public exports", () => {
+  it("exports Mem0 compatibility classes", () => {
+    expect(DefaultMem0ContextResolver).toBeTypeOf("function");
+    expect(Mem0MemoryClient).toBeTypeOf("function");
   });
 });
 

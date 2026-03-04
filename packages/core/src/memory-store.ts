@@ -75,6 +75,7 @@ export interface MemoryStore {
     context: MemoryContext,
     options?: MemoryReadOptions,
   ): Promise<MemoryRecord | null>;
+  deleteById(id: string, context: MemoryContext): Promise<boolean>;
   getByKey(
     key: string,
     context: MemoryContext,
@@ -373,6 +374,23 @@ export class InMemoryMemoryStore implements MemoryStore {
     });
 
     return result;
+  }
+
+  async deleteById(id: string, context: MemoryContext): Promise<boolean> {
+    const record = this.records.get(id);
+    if (!record) return false;
+
+    const canDelete =
+      record.orgId === context.orgId &&
+      (record.scope !== "project" || record.projectId === context.projectId) &&
+      (record.scope !== "session" ||
+        (record.projectId === context.projectId && record.sessionId === context.sessionId));
+
+    if (!canDelete) return false;
+
+    this.records.delete(id);
+    if (record.key) this.keyToId.delete(this.makeKeyIndex(record, record.key));
+    return true;
   }
 
   async getByKey(
@@ -738,6 +756,29 @@ export class SqlMemoryStore implements MemoryStore {
     });
 
     return visibleRecord;
+  }
+
+  async deleteById(id: string, context: MemoryContext): Promise<boolean> {
+    const row = await this.db.queryOne<MemoryRow>(
+      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, embedding, embedding_model, created_at, expires_at
+       FROM memories
+       WHERE id = ?`,
+      [id],
+    );
+
+    if (!row) return false;
+
+    const record = this.rowToRecord(row);
+    const canDelete =
+      record.orgId === context.orgId &&
+      (record.scope !== "project" || record.projectId === context.projectId) &&
+      (record.scope !== "session" ||
+        (record.projectId === context.projectId && record.sessionId === context.sessionId));
+
+    if (!canDelete) return false;
+
+    const removed = await this.db.execute(`DELETE FROM memories WHERE id = ?`, [id]);
+    return removed > 0;
   }
 
   async getByKey(

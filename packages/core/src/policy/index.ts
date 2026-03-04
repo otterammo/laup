@@ -80,6 +80,22 @@ export {
   PermissionResultSchema,
 } from "./permission-audit-types.js";
 export type {
+  LoadedPolicyDocument,
+  PolicyApplyResult,
+  PolicyDeploymentPlan,
+  PolicyDiffEntry,
+  PolicyDocumentFormat,
+  PolicyDocumentLoadError,
+  PolicyRepositoryLoadResult,
+} from "./policy-as-code.js";
+export {
+  applyPolicyDeploymentPlan,
+  createPolicyDeploymentPlan,
+  formatPolicyPlanForCi,
+  loadPolicyDocumentsFromPaths,
+  mergePolicyDocuments,
+} from "./policy-as-code.js";
+export type {
   DefaultEffect,
   EvaluationReason,
   EvaluationResult,

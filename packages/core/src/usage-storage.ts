@@ -36,6 +36,12 @@ export interface UsageQueryFilter {
   /** Filter by skill ID */
   skillId?: string;
 
+  /** Filter by adapter ID */
+  adapterId?: string;
+
+  /** Filter by tool category */
+  toolCategory?: string;
+
   /** Start time (inclusive) */
   startTime?: Date;
 
@@ -274,6 +280,10 @@ export class InMemoryUsageStorage implements UsageStorage {
       }
 
       if (filter.skillId && event.attribution.skillId !== filter.skillId) return false;
+      if (filter.adapterId && event.attribution.adapterId !== filter.adapterId) return false;
+      if (filter.toolCategory && event.attribution.toolCategory !== filter.toolCategory) {
+        return false;
+      }
 
       const eventTime = new Date(event.timestamp).getTime();
       if (filter.startTime && eventTime < filter.startTime.getTime()) return false;
@@ -323,6 +333,8 @@ export class SqlUsageStorage implements UsageStorage {
         project_id TEXT,
         org_id TEXT,
         skill_id TEXT,
+        adapter_id TEXT,
+        tool_category TEXT,
         cost_center TEXT,
         data TEXT NOT NULL,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -343,8 +355,8 @@ export class SqlUsageStorage implements UsageStorage {
     const id = event.id ?? `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     await this.db.execute(
-      `INSERT INTO usage_events (id, type, timestamp, user_id, team_id, project_id, org_id, skill_id, cost_center, data)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO usage_events (id, type, timestamp, user_id, team_id, project_id, org_id, skill_id, adapter_id, tool_category, cost_center, data)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         event.type,
@@ -354,6 +366,8 @@ export class SqlUsageStorage implements UsageStorage {
         event.attribution.projectId ?? null,
         event.attribution.orgId ?? null,
         event.attribution.skillId ?? null,
+        event.attribution.adapterId ?? null,
+        event.attribution.toolCategory ?? null,
         event.attribution.costCenter ?? null,
         JSON.stringify(event.data),
       ],
@@ -369,8 +383,8 @@ export class SqlUsageStorage implements UsageStorage {
         const id = event.id ?? `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
         await tx.query(
-          `INSERT INTO usage_events (id, type, timestamp, user_id, team_id, project_id, org_id, skill_id, cost_center, data)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO usage_events (id, type, timestamp, user_id, team_id, project_id, org_id, skill_id, adapter_id, tool_category, cost_center, data)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             event.type,
@@ -380,6 +394,8 @@ export class SqlUsageStorage implements UsageStorage {
             event.attribution.projectId ?? null,
             event.attribution.orgId ?? null,
             event.attribution.skillId ?? null,
+            event.attribution.adapterId ?? null,
+            event.attribution.toolCategory ?? null,
             event.attribution.costCenter ?? null,
             JSON.stringify(event.data),
           ],

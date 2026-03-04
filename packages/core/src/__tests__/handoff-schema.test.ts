@@ -5,6 +5,7 @@ import {
   ContextPacketSchema,
   createPartialPacket,
   estimateCompressedSize,
+  HandoffHistoryEntrySchema,
   shouldCompressPacket,
   validatePacketSecurity,
 } from "../handoff-schema.js";
@@ -174,6 +175,34 @@ describe("handoff-schema", () => {
       expect(
         (partial as { workingContext?: { currentFile?: string } }).workingContext?.currentFile,
       ).toBe("[REDACTED]");
+    });
+  });
+
+  describe("HandoffHistoryEntrySchema", () => {
+    it("accepts routing decision record", () => {
+      const result = HandoffHistoryEntrySchema.safeParse({
+        id: "hist-1",
+        packetId: samplePacket.packetId,
+        sourceAgent: "codex",
+        targetAgent: "claude-code",
+        mode: "sync",
+        status: "sent",
+        routingDecision: {
+          routing: "capability-match",
+          selectedTool: "claude-code",
+          reason: "best capability and cost",
+          consideredTools: ["claude-code", "copilot"],
+          scoredCandidates: [
+            { tool: "claude-code", score: 99 },
+            { tool: "copilot", score: 10 },
+          ],
+        },
+        timestamps: {
+          created: "2026-01-15T10:00:00Z",
+        },
+      });
+
+      expect(result.success).toBe(true);
     });
   });
 });

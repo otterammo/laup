@@ -130,6 +130,33 @@ export type HandoffAck = z.infer<typeof HandoffAckSchema>;
 /**
  * Handoff history entry (HAND-008).
  */
+export const HandoffRoutingDecisionSchema = z.object({
+  /** Routing mode used for decision */
+  routing: HandoffRoutingSchema,
+
+  /** Selected target tool */
+  selectedTool: z.string(),
+
+  /** Human-readable reason for selection */
+  reason: z.string(),
+
+  /** Candidate tools considered by router */
+  consideredTools: z.array(z.string()),
+
+  /** Optional candidate scores from policy routing */
+  scoredCandidates: z
+    .array(
+      z.object({
+        tool: z.string(),
+        score: z.number(),
+      }),
+    )
+    .optional(),
+});
+
+/**
+ * Handoff history entry (HAND-008).
+ */
 export const HandoffHistoryEntrySchema = z.object({
   /** Unique entry ID */
   id: z.string(),
@@ -149,6 +176,9 @@ export const HandoffHistoryEntrySchema = z.object({
   /** Final status */
   status: HandoffStatusSchema,
 
+  /** Routing decision record (HAND-007) */
+  routingDecision: HandoffRoutingDecisionSchema.optional(),
+
   /** Timestamps */
   timestamps: z.object({
     created: z.string(),
@@ -166,6 +196,8 @@ export const HandoffHistoryEntrySchema = z.object({
   /** Error details if failed */
   error: z.string().optional(),
 });
+
+export type HandoffRoutingDecision = z.infer<typeof HandoffRoutingDecisionSchema>;
 
 export type HandoffHistoryEntry = z.infer<typeof HandoffHistoryEntrySchema>;
 

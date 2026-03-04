@@ -165,3 +165,16 @@ export {
   ResourceAccessBlockedError,
   ResourceGuard,
 } from "./resource-guard.js";
+export type {
+  SecurityDashboardConfig,
+  SecurityDashboardMetrics,
+  SecurityDashboardSnapshot,
+  SecurityDashboardWindow,
+} from "./security-dashboard.js";
+export {
+  createSecurityDashboardService,
+  SecurityDashboardMetricsSchema,
+  SecurityDashboardService,
+  SecurityDashboardSnapshotSchema,
+  SecurityDashboardWindowSchema,
+} from "./security-dashboard.js";

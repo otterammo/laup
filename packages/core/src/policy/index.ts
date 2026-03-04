@@ -48,6 +48,28 @@ export {
   createApprovalGateService,
   evaluatePolicyWithApprovalGate,
 } from "./approval-gate.js";
+export type {
+  ComplianceControlDefinition,
+  ComplianceControlStatus,
+  ComplianceEvidenceMatcher,
+  ComplianceProfileDefinition,
+  ComplianceReport,
+  ComplianceReportControl,
+  ComplianceReportEvidence,
+  ComplianceReportGenerateInput,
+  ComplianceReportProfile,
+  ComplianceReportServiceConfig,
+} from "./compliance-reporting.js";
+export {
+  ComplianceControlStatusSchema,
+  ComplianceReportControlSchema,
+  ComplianceReportEvidenceSchema,
+  ComplianceReportProfileSchema,
+  ComplianceReportSchema,
+  ComplianceReportService,
+  createComplianceReportService,
+  getComplianceProfileDefinition,
+} from "./compliance-reporting.js";
 export type { ConditionalDimensions } from "./condition-evaluator.js";
 export { conditionsMatch, deriveConditionalDimensions } from "./condition-evaluator.js";
 export type {

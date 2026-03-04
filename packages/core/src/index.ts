@@ -210,24 +210,6 @@ export {
   MemoryJobQueue,
 } from "./job-queue.js";
 export type {
-  MarketplaceApiOptions,
-  MarketplaceApiRequest,
-  MarketplaceApiResponse,
-  MarketplacePage,
-  MarketplaceQuery,
-  MarketplaceSkill,
-  MarketplaceSortBy,
-  MarketplaceSortOrder,
-  MarketplaceWebOptions,
-  SkillMarketplace,
-} from "./marketplace.js";
-export {
-  createMarketplaceApiHandler,
-  InMemorySkillMarketplace,
-  renderMarketplaceHtml,
-  renderMarketplacePage,
-} from "./marketplace.js";
-export type {
   McpPropagationOptions,
   McpPropagationReport,
   McpPropagationTarget,
@@ -523,8 +505,11 @@ export type { SkillRenderer } from "./skill-renderer.js";
 export {
   AiderSkillRenderer,
   ClaudeCodeSkillRenderer,
+  CodexSkillRenderer,
+  CopilotSkillRenderer,
   CursorSkillRenderer,
   getSkillRenderer,
+  OpenCodeSkillRenderer,
   renderSkillToAllTools,
   skillRenderers,
 } from "./skill-renderer.js";

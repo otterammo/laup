@@ -85,17 +85,22 @@ export {
 } from "./cost-schema.js";
 export type {
   CredentialAccess,
+  CredentialAccessContext,
+  CredentialAccessPolicy,
   CredentialMetadata,
   CredentialQueryFilter,
   CredentialStore,
   CredentialType,
   EncryptionProvider,
+  SecretScope,
+  SecretScopeKind,
   StoredCredential,
 } from "./credential-store.js";
 export {
   CredentialTypeSchema,
   createCredentialStore,
   InMemoryCredentialStore,
+  SecretScopeKindSchema,
   SqlCredentialStore,
   TestEncryptionProvider,
 } from "./credential-store.js";

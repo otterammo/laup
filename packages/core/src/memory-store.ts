@@ -29,6 +29,7 @@ export interface MemoryRecord {
   createdAt: string;
   expiresAt?: string;
   metadata?: Record<string, unknown>;
+  sourceToolId?: string;
   embedding?: number[];
   embeddingModel?: string;
 }
@@ -40,9 +41,36 @@ export interface MemoryWriteInput {
   scope: MemoryScope;
   context: MemoryContext;
   metadata?: Record<string, unknown>;
+  sourceToolId?: string;
   embeddingModel?: string;
   now?: Date;
 }
+
+export type MemoryConflictResolutionStrategy =
+  | "last-write-wins"
+  | "first-write-wins"
+  | "manual-review";
+
+export interface MemoryConflict {
+  id: string;
+  key: string;
+  strategy: MemoryConflictResolutionStrategy;
+  existingRecordId: string;
+  incomingRecordId: string;
+  scope: MemoryScope;
+  orgId: string;
+  projectId?: string;
+  sessionId?: string;
+  status: "pending" | "resolved";
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+export interface MemoryConflictListOptions {
+  status?: "pending" | "resolved";
+}
+
+export type MemoryConflictResolutionAction = "accept-incoming" | "keep-existing";
 
 export interface MemoryReadOptions {
   includeSharedFromBroaderScopes?: boolean;
@@ -75,12 +103,12 @@ export interface MemoryStore {
     context: MemoryContext,
     options?: MemoryReadOptions,
   ): Promise<MemoryRecord | null>;
-  deleteById(id: string, context: MemoryContext): Promise<boolean>;
   getByKey(
     key: string,
     context: MemoryContext,
     options?: MemoryReadOptions,
   ): Promise<MemoryRecord | null>;
+  deleteById(id: string, context: MemoryContext): Promise<boolean>;
   semanticSearch(
     query: string,
     scope: MemoryScope,
@@ -88,6 +116,15 @@ export interface MemoryStore {
     options?: MemorySearchOptions,
   ): Promise<MemorySearchResult[]>;
   pruneExpired(now?: Date): Promise<number>;
+  listConflicts(
+    context: MemoryContext,
+    options?: MemoryConflictListOptions,
+  ): Promise<MemoryConflict[]>;
+  resolveConflict(
+    conflictId: string,
+    action: MemoryConflictResolutionAction,
+    context: MemoryContext,
+  ): Promise<MemoryConflict | null>;
 }
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -166,6 +203,20 @@ export interface MemoryStoreRuntimeOptions {
   embeddingProvider?: MemoryEmbeddingProvider;
   defaultEmbeddingModel?: string;
   defaultTopK?: number;
+  conflictResolutionStrategy?: MemoryConflictResolutionStrategy;
+  conflictResolutionByProject?: (
+    context: MemoryContext,
+  ) => MemoryConflictResolutionStrategy | undefined;
+}
+
+export class MemoryConflictError extends Error {
+  constructor(
+    message: string,
+    public readonly conflictId?: string,
+  ) {
+    super(message);
+    this.name = "MemoryConflictError";
+  }
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
@@ -218,15 +269,23 @@ class MemoryAuditLogger {
 export class InMemoryMemoryStore implements MemoryStore {
   private records = new Map<string, MemoryRecord>();
   private keyToId = new Map<string, string>();
+  private conflicts = new Map<string, MemoryConflict>();
+  private conflictPayloads = new Map<string, MemoryWriteInput>();
   private embeddingProvider: MemoryEmbeddingProvider;
   private defaultEmbeddingModel: string;
   private defaultTopK: number;
+  private conflictResolutionStrategy: MemoryConflictResolutionStrategy;
+  private conflictResolutionByProject:
+    | ((context: MemoryContext) => MemoryConflictResolutionStrategy | undefined)
+    | undefined;
   private auditLogger: MemoryAuditLogger;
 
   constructor(options?: MemoryStoreRuntimeOptions) {
     this.embeddingProvider = options?.embeddingProvider ?? new DefaultMemoryEmbeddingProvider();
     this.defaultEmbeddingModel = options?.defaultEmbeddingModel ?? DEFAULT_EMBEDDING_MODEL;
     this.defaultTopK = Math.max(1, options?.defaultTopK ?? DEFAULT_TOP_K);
+    this.conflictResolutionStrategy = options?.conflictResolutionStrategy ?? "last-write-wins";
+    this.conflictResolutionByProject = options?.conflictResolutionByProject;
     this.auditLogger = new MemoryAuditLogger(options?.auditStorage, options?.auditActor);
   }
 
@@ -242,28 +301,77 @@ export class InMemoryMemoryStore implements MemoryStore {
   }
 
   async write(input: MemoryWriteInput): Promise<MemoryRecord> {
-    const id = input.id ?? randomId();
+    const requestedId = input.id ?? randomId();
     const now = input.now ?? new Date();
+    const strategy =
+      this.conflictResolutionByProject?.(input.context) ?? this.conflictResolutionStrategy;
 
-    const existing = this.records.get(id);
+    const scopeContext = buildScopeContext(input.scope, input.context);
+
+    let id = requestedId;
+    let existing = this.records.get(id);
     if (existing && existing.scope !== input.scope) {
       throw new Error(`Memory scope is immutable for id ${id}`);
     }
-
-    const scopeContext = buildScopeContext(input.scope, input.context);
-    const expiresAt =
-      input.scope === "session"
-        ? new Date(now.getTime() + SESSION_TTL_MS).toISOString()
-        : undefined;
 
     const nextKey = input.key ?? existing?.key;
     if (nextKey) {
       const keyIndex = this.makeKeyIndex(scopeContext, nextKey);
       const currentId = this.keyToId.get(keyIndex);
-      if (currentId && currentId !== id) {
-        throw new Error(`Memory key is already in use in this scope: ${nextKey}`);
+      if (currentId && currentId !== requestedId) {
+        const currentRecord = this.records.get(currentId);
+        if (currentRecord?.scope !== input.scope) {
+          throw new Error(`Memory key is already in use with a different scope: ${nextKey}`);
+        }
+        if (strategy === "first-write-wins") {
+          await this.auditLogger.record({
+            action: "memory.conflict",
+            targetId: currentId,
+            metadata: { strategy, resolution: "rejected", key: nextKey },
+          });
+          throw new MemoryConflictError(`Memory key is already in use: ${nextKey}`);
+        }
+        if (strategy === "manual-review") {
+          const conflictId = `mem_conflict_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+          this.conflicts.set(conflictId, {
+            id: conflictId,
+            key: nextKey,
+            strategy,
+            existingRecordId: currentId,
+            incomingRecordId: requestedId,
+            scope: input.scope,
+            orgId: scopeContext.orgId,
+            ...(scopeContext.projectId ? { projectId: scopeContext.projectId } : {}),
+            ...(scopeContext.sessionId ? { sessionId: scopeContext.sessionId } : {}),
+            status: "pending",
+            createdAt: now.toISOString(),
+          });
+          this.conflictPayloads.set(conflictId, { ...input, id: requestedId, now });
+          await this.auditLogger.record({
+            action: "memory.conflict",
+            targetId: currentId,
+            metadata: { strategy, resolution: "queued", key: nextKey, conflictId },
+          });
+          throw new MemoryConflictError(
+            `Memory write queued for manual review for key: ${nextKey}`,
+            conflictId,
+          );
+        }
+
+        id = currentId;
+        existing = this.records.get(id);
+        await this.auditLogger.record({
+          action: "memory.conflict",
+          targetId: currentId,
+          metadata: { strategy, resolution: "overwritten", key: nextKey },
+        });
       }
     }
+
+    const expiresAt =
+      input.scope === "session"
+        ? new Date(now.getTime() + SESSION_TTL_MS).toISOString()
+        : undefined;
 
     const embeddingModel = input.embeddingModel ?? this.defaultEmbeddingModel;
     const embedding = await this.embeddingProvider.embed(input.content, { model: embeddingModel });
@@ -279,6 +387,7 @@ export class InMemoryMemoryStore implements MemoryStore {
       ...scopeContext,
       ...(expiresAt ? { expiresAt } : {}),
       ...(input.metadata ? { metadata: input.metadata } : {}),
+      ...(input.sourceToolId ? { sourceToolId: input.sourceToolId } : {}),
     };
 
     if (existing?.key && existing.key !== nextKey) {
@@ -376,23 +485,6 @@ export class InMemoryMemoryStore implements MemoryStore {
     return result;
   }
 
-  async deleteById(id: string, context: MemoryContext): Promise<boolean> {
-    const record = this.records.get(id);
-    if (!record) return false;
-
-    const canDelete =
-      record.orgId === context.orgId &&
-      (record.scope !== "project" || record.projectId === context.projectId) &&
-      (record.scope !== "session" ||
-        (record.projectId === context.projectId && record.sessionId === context.sessionId));
-
-    if (!canDelete) return false;
-
-    this.records.delete(id);
-    if (record.key) this.keyToId.delete(this.makeKeyIndex(record, record.key));
-    return true;
-  }
-
   async getByKey(
     key: string,
     context: MemoryContext,
@@ -452,6 +544,66 @@ export class InMemoryMemoryStore implements MemoryStore {
     return null;
   }
 
+  async deleteById(id: string, context: MemoryContext): Promise<boolean> {
+    const existing = await this.getById(id, context, { includeSharedFromBroaderScopes: true });
+    if (!existing) return false;
+    this.records.delete(id);
+    if (existing.key) {
+      this.keyToId.delete(this.makeKeyIndex(existing, existing.key));
+    }
+    await this.auditLogger.record({ action: "memory.deleteById", targetId: id });
+    return true;
+  }
+
+  async listConflicts(
+    context: MemoryContext,
+    options?: MemoryConflictListOptions,
+  ): Promise<MemoryConflict[]> {
+    const status = options?.status;
+    return Array.from(this.conflicts.values())
+      .filter((conflict) => conflict.orgId === context.orgId)
+      .filter((conflict) => !context.projectId || conflict.projectId === context.projectId)
+      .filter((conflict) => !status || conflict.status === status)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async resolveConflict(
+    conflictId: string,
+    action: MemoryConflictResolutionAction,
+    context: MemoryContext,
+  ): Promise<MemoryConflict | null> {
+    const conflict = this.conflicts.get(conflictId);
+    if (!conflict || conflict.orgId !== context.orgId) return null;
+    if (conflict.status === "resolved") return conflict;
+
+    if (action === "accept-incoming") {
+      const payload = this.conflictPayloads.get(conflictId);
+      if (payload) {
+        this.conflictPayloads.delete(conflictId);
+        await this.write({ ...payload, id: conflict.existingRecordId, context });
+      }
+    }
+
+    const resolved: MemoryConflict = {
+      ...conflict,
+      status: "resolved",
+      resolvedAt: new Date().toISOString(),
+    };
+    this.conflicts.set(conflictId, resolved);
+
+    await this.auditLogger.record({
+      action: "memory.conflict.resolved",
+      targetId: conflict.existingRecordId,
+      metadata: {
+        conflictId,
+        action,
+        key: conflict.key,
+      },
+    });
+
+    return resolved;
+  }
+
   async semanticSearch(
     query: string,
     scope: MemoryScope,
@@ -508,6 +660,7 @@ interface MemoryRow {
   project_id: string | null;
   session_id: string | null;
   metadata: string | null;
+  source_tool_id: string | null;
   embedding: string | null;
   embedding_model: string | null;
   created_at: string;
@@ -518,6 +671,10 @@ export class SqlMemoryStore implements MemoryStore {
   private embeddingProvider: MemoryEmbeddingProvider;
   private defaultEmbeddingModel: string;
   private defaultTopK: number;
+  private conflictResolutionStrategy: MemoryConflictResolutionStrategy;
+  private conflictResolutionByProject:
+    | ((context: MemoryContext) => MemoryConflictResolutionStrategy | undefined)
+    | undefined;
   private auditLogger: MemoryAuditLogger;
 
   constructor(
@@ -527,6 +684,8 @@ export class SqlMemoryStore implements MemoryStore {
     this.embeddingProvider = options?.embeddingProvider ?? new DefaultMemoryEmbeddingProvider();
     this.defaultEmbeddingModel = options?.defaultEmbeddingModel ?? DEFAULT_EMBEDDING_MODEL;
     this.defaultTopK = Math.max(1, options?.defaultTopK ?? DEFAULT_TOP_K);
+    this.conflictResolutionStrategy = options?.conflictResolutionStrategy ?? "last-write-wins";
+    this.conflictResolutionByProject = options?.conflictResolutionByProject;
     this.auditLogger = new MemoryAuditLogger(options?.auditStorage, options?.auditActor);
   }
 
@@ -541,6 +700,7 @@ export class SqlMemoryStore implements MemoryStore {
         project_id TEXT,
         session_id TEXT,
         metadata TEXT,
+        source_tool_id TEXT,
         embedding TEXT,
         embedding_model TEXT,
         created_at TEXT NOT NULL,
@@ -565,12 +725,33 @@ export class SqlMemoryStore implements MemoryStore {
       `CREATE INDEX IF NOT EXISTS idx_memories_expires_at ON memories(expires_at)`,
     );
 
+    await this.db.execute(`
+      CREATE TABLE IF NOT EXISTS memory_conflicts (
+        id TEXT PRIMARY KEY,
+        key TEXT NOT NULL,
+        strategy TEXT NOT NULL,
+        existing_record_id TEXT NOT NULL,
+        incoming_record_id TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        org_id TEXT NOT NULL,
+        project_id TEXT,
+        session_id TEXT,
+        status TEXT NOT NULL,
+        payload TEXT,
+        created_at TEXT NOT NULL,
+        resolved_at TEXT
+      )
+    `);
+
     await this.auditLogger.record({ action: "memory.init" });
   }
 
   async write(input: MemoryWriteInput): Promise<MemoryRecord> {
-    const id = input.id ?? randomId();
+    const requestedId = input.id ?? randomId();
     const now = input.now ?? new Date();
+    const strategy =
+      this.conflictResolutionByProject?.(input.context) ?? this.conflictResolutionStrategy;
+    let id = requestedId;
     const existing = await this.db.queryOne<{
       scope: string;
       created_at: string;
@@ -587,12 +768,67 @@ export class SqlMemoryStore implements MemoryStore {
     const createdAt = existing?.created_at ?? now.toISOString();
     const key = input.key ?? existing?.key ?? null;
 
+    if (key) {
+      const keyHolder = await this.db.queryOne<{ id: string; scope: MemoryScope }>(
+        `SELECT id, scope FROM memories WHERE org_id = ? AND key = ?`,
+        [scopeContext.orgId, key],
+      );
+      if (keyHolder && keyHolder.id !== requestedId) {
+        if (keyHolder.scope !== input.scope) {
+          throw new Error(`Memory key is already in use with a different scope: ${key}`);
+        }
+        if (strategy === "first-write-wins") {
+          await this.auditLogger.record({
+            action: "memory.conflict",
+            targetId: keyHolder.id,
+            metadata: { strategy, resolution: "rejected", key },
+          });
+          throw new MemoryConflictError(`Memory key is already in use: ${key}`);
+        }
+        if (strategy === "manual-review") {
+          const conflictId = `mem_conflict_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+          await this.db.execute(
+            `INSERT INTO memory_conflicts (id, key, strategy, existing_record_id, incoming_record_id, scope, org_id, project_id, session_id, status, payload, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+            [
+              conflictId,
+              key,
+              strategy,
+              keyHolder.id,
+              requestedId,
+              input.scope,
+              scopeContext.orgId,
+              scopeContext.projectId ?? null,
+              scopeContext.sessionId ?? null,
+              JSON.stringify({ ...input, id: requestedId, now: now.toISOString() }),
+              now.toISOString(),
+            ],
+          );
+          await this.auditLogger.record({
+            action: "memory.conflict",
+            targetId: keyHolder.id,
+            metadata: { strategy, resolution: "queued", key, conflictId },
+          });
+          throw new MemoryConflictError(
+            `Memory write queued for manual review for key: ${key}`,
+            conflictId,
+          );
+        }
+        id = keyHolder.id;
+        await this.auditLogger.record({
+          action: "memory.conflict",
+          targetId: keyHolder.id,
+          metadata: { strategy, resolution: "overwritten", key },
+        });
+      }
+    }
+
     const embeddingModel = input.embeddingModel ?? this.defaultEmbeddingModel;
     const embedding = await this.embeddingProvider.embed(input.content, { model: embeddingModel });
 
     await this.db.execute(
-      `INSERT OR REPLACE INTO memories (id, key, content, scope, org_id, project_id, session_id, metadata, embedding, embedding_model, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO memories (id, key, content, scope, org_id, project_id, session_id, metadata, source_tool_id, embedding, embedding_model, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         key,
@@ -602,6 +838,7 @@ export class SqlMemoryStore implements MemoryStore {
         scopeContext.projectId ?? null,
         scopeContext.sessionId ?? null,
         input.metadata ? JSON.stringify(input.metadata) : null,
+        input.sourceToolId ?? null,
         JSON.stringify(embedding),
         embeddingModel,
         createdAt,
@@ -620,6 +857,7 @@ export class SqlMemoryStore implements MemoryStore {
       createdAt,
       ...(expiresAt ? { expiresAt } : {}),
       ...(input.metadata ? { metadata: input.metadata } : {}),
+      ...(input.sourceToolId ? { sourceToolId: input.sourceToolId } : {}),
       embedding,
       embeddingModel,
     };
@@ -665,7 +903,7 @@ export class SqlMemoryStore implements MemoryStore {
     const params: (string | null)[] = [context.orgId, ...allowedScopes, now];
 
     let query = `
-      SELECT id, key, content, scope, org_id, project_id, session_id, metadata, embedding, embedding_model, created_at, expires_at
+      SELECT id, key, content, scope, org_id, project_id, session_id, metadata, source_tool_id, embedding, embedding_model, created_at, expires_at
       FROM memories
       WHERE org_id = ?
         AND scope IN (${placeholders})
@@ -711,7 +949,7 @@ export class SqlMemoryStore implements MemoryStore {
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
 
     const row = await this.db.queryOne<MemoryRow>(
-      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, embedding, embedding_model, created_at, expires_at
+      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, source_tool_id, embedding, embedding_model, created_at, expires_at
        FROM memories
        WHERE id = ?`,
       [id],
@@ -758,29 +996,6 @@ export class SqlMemoryStore implements MemoryStore {
     return visibleRecord;
   }
 
-  async deleteById(id: string, context: MemoryContext): Promise<boolean> {
-    const row = await this.db.queryOne<MemoryRow>(
-      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, embedding, embedding_model, created_at, expires_at
-       FROM memories
-       WHERE id = ?`,
-      [id],
-    );
-
-    if (!row) return false;
-
-    const record = this.rowToRecord(row);
-    const canDelete =
-      record.orgId === context.orgId &&
-      (record.scope !== "project" || record.projectId === context.projectId) &&
-      (record.scope !== "session" ||
-        (record.projectId === context.projectId && record.sessionId === context.sessionId));
-
-    if (!canDelete) return false;
-
-    const removed = await this.db.execute(`DELETE FROM memories WHERE id = ?`, [id]);
-    return removed > 0;
-  }
-
   async getByKey(
     key: string,
     context: MemoryContext,
@@ -790,7 +1005,7 @@ export class SqlMemoryStore implements MemoryStore {
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
 
     const row = await this.db.queryOne<MemoryRow>(
-      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, embedding, embedding_model, created_at, expires_at
+      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, source_tool_id, embedding, embedding_model, created_at, expires_at
        FROM memories
        WHERE org_id = ?
          AND key = ?
@@ -857,6 +1072,114 @@ export class SqlMemoryStore implements MemoryStore {
     return visibleRecord;
   }
 
+  async deleteById(id: string, context: MemoryContext): Promise<boolean> {
+    const visible = await this.getById(id, context, { includeSharedFromBroaderScopes: true });
+    if (!visible) return false;
+    const removed = await this.db.execute(`DELETE FROM memories WHERE id = ?`, [id]);
+    await this.auditLogger.record({ action: "memory.deleteById", targetId: id });
+    return removed > 0;
+  }
+
+  async listConflicts(
+    context: MemoryContext,
+    options?: MemoryConflictListOptions,
+  ): Promise<MemoryConflict[]> {
+    const params: (string | null)[] = [context.orgId];
+    let query = `SELECT id, key, strategy, existing_record_id, incoming_record_id, scope, org_id, project_id, session_id, status, payload, created_at, resolved_at
+      FROM memory_conflicts
+      WHERE org_id = ?`;
+    if (context.projectId) {
+      query += ` AND (project_id = ? OR project_id IS NULL)`;
+      params.push(context.projectId);
+    }
+    if (options?.status) {
+      query += ` AND status = ?`;
+      params.push(options.status);
+    }
+    query += ` ORDER BY created_at ASC`;
+
+    const result = await this.db.query<{
+      id: string;
+      key: string;
+      strategy: string;
+      existing_record_id: string;
+      incoming_record_id: string;
+      scope: string;
+      org_id: string;
+      project_id: string | null;
+      session_id: string | null;
+      status: string;
+      created_at: string;
+      resolved_at: string | null;
+    }>(query, params);
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      key: row.key,
+      strategy: row.strategy as MemoryConflictResolutionStrategy,
+      existingRecordId: row.existing_record_id,
+      incomingRecordId: row.incoming_record_id,
+      scope: row.scope as MemoryScope,
+      orgId: row.org_id,
+      ...(row.project_id ? { projectId: row.project_id } : {}),
+      ...(row.session_id ? { sessionId: row.session_id } : {}),
+      status: row.status as "pending" | "resolved",
+      createdAt: row.created_at,
+      ...(row.resolved_at ? { resolvedAt: row.resolved_at } : {}),
+    }));
+  }
+
+  async resolveConflict(
+    conflictId: string,
+    action: MemoryConflictResolutionAction,
+    context: MemoryContext,
+  ): Promise<MemoryConflict | null> {
+    const pending = await this.listConflicts(context, { status: "pending" });
+    const conflict = pending.find((entry) => entry.id === conflictId);
+    if (!conflict) return null;
+
+    if (action === "accept-incoming") {
+      const payloadRow = await this.db.queryOne<{ payload: string | null }>(
+        `SELECT payload FROM memory_conflicts WHERE id = ?`,
+        [conflictId],
+      );
+      if (payloadRow?.payload) {
+        const payload = JSON.parse(payloadRow.payload) as Omit<MemoryWriteInput, "now"> & {
+          now?: string;
+        };
+        const { now: payloadNow, ...rest } = payload;
+        await this.write({
+          ...rest,
+          id: conflict.existingRecordId,
+          ...(payloadNow ? { now: new Date(payloadNow) } : {}),
+          context,
+        });
+      }
+    }
+
+    const resolvedAt = new Date().toISOString();
+    await this.db.execute(
+      `UPDATE memory_conflicts SET status = 'resolved', resolved_at = ? WHERE id = ?`,
+      [resolvedAt, conflictId],
+    );
+
+    await this.auditLogger.record({
+      action: "memory.conflict.resolved",
+      targetId: conflict.existingRecordId,
+      metadata: {
+        conflictId,
+        action,
+        key: conflict.key,
+      },
+    });
+
+    return {
+      ...conflict,
+      status: "resolved",
+      resolvedAt,
+    };
+  }
+
   async semanticSearch(
     query: string,
     scope: MemoryScope,
@@ -915,6 +1238,7 @@ export class SqlMemoryStore implements MemoryStore {
       createdAt: String(row.created_at),
       ...(row.expires_at ? { expiresAt: String(row.expires_at) } : {}),
       ...(metadata ? { metadata } : {}),
+      ...(row.source_tool_id ? { sourceToolId: String(row.source_tool_id) } : {}),
       ...(embedding ? { embedding } : {}),
       ...(row.embedding_model ? { embeddingModel: String(row.embedding_model) } : {}),
     };

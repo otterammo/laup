@@ -35,6 +35,23 @@ Memory scope is write-time immutable.
 
 If a record with the same id already exists, attempting to write it with a different scope must fail.
 
+## Conflict Resolution Strategies (MEM-011)
+
+When duplicate writes target the same `{orgId, key}` concurrently, memory stores apply a
+configurable strategy:
+
+- `last-write-wins` (default) - conflicting write overwrites the existing record
+- `first-write-wins` - conflicting write is rejected
+- `manual-review` - conflicting write is queued in a review queue and must be resolved manually
+
+Strategies can be configured globally via `conflictResolutionStrategy` or per project via
+`conflictResolutionByProject(context)` in `MemoryStoreRuntimeOptions`.
+
+Manual review queue API:
+
+- `listConflicts(context, { status })`
+- `resolveConflict(conflictId, "accept-incoming" | "keep-existing", context)`
+
 ## Audit Trail (MEM-012)
 
 Memory stores can optionally emit audit entries for every memory operation by passing
@@ -48,6 +65,8 @@ Recorded operations:
 - `memory.getById`
 - `memory.getByKey`
 - `memory.pruneExpired`
+- `memory.conflict`
+- `memory.conflict.resolved`
 
 Audit entries use category `memory`, target type `memory`, and include operation metadata
 (result counts, scope/context, and lookup outcomes where relevant).

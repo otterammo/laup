@@ -97,6 +97,7 @@ export class Mem0MemoryClient implements Mem0CompatibleMemoryClient {
         content: message.content,
         scope: resolvedScope,
         context,
+        sourceToolId: "mem0",
         metadata: {
           source: "mem0",
           role: message.role,

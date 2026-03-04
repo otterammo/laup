@@ -1,0 +1,36 @@
+# Memory Scope Semantics (MEM-001)
+
+This document defines LAUP memory-scope behavior implemented in `packages/core/src/memory-store.ts`.
+
+## Scopes
+
+- `session` - ephemeral memory tied to `{ orgId, projectId, sessionId }`
+- `project` - durable memory tied to `{ orgId, projectId }`
+- `org` - durable memory tied to `{ orgId }`
+
+## Persistence
+
+- `session` memories get an `expiresAt` set on write, with a max TTL of 24 hours
+- `project` memories do not expire automatically
+- `org` memories do not expire automatically
+
+## Visibility
+
+Default reads are scope-local only:
+
+- session reads see only session memories in the same org/project/session
+- project reads see only project memories in the same org/project
+- org reads see only org memories in the same org
+
+Broader-scope visibility must be explicit via `includeSharedFromBroaderScopes: true`:
+
+- session reads may include project + org memories for the same org/project
+- project reads may include org memories for the same org
+
+No implicit cross-org, cross-project, or cross-session leakage is allowed.
+
+## Immutability
+
+Memory scope is write-time immutable.
+
+If a record with the same id already exists, attempting to write it with a different scope must fail.

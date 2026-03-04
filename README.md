@@ -198,6 +198,8 @@ See [docs/memory-semantic-retrieval.md](docs/memory-semantic-retrieval.md) for M
 semantic retrieval behavior and API usage.
 See [docs/memory-scopes.md](docs/memory-scopes.md) for MEM-001 and MEM-012 memory scope and
 audit trail behavior.
+See [docs/context-packet-format.md](docs/context-packet-format.md) for HAND-001
+standard context packet format requirements.
 
 ## Roadmap
 

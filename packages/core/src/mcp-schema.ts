@@ -18,7 +18,7 @@ export type McpHealthStatus = z.infer<typeof McpHealthStatusSchema>;
 /**
  * MCP server scope level (MCP-004).
  */
-export const McpScopeSchema = z.enum(["org", "team", "project"]);
+export const McpScopeSchema = z.enum(["org", "team", "project", "user"]);
 
 export type McpScope = z.infer<typeof McpScopeSchema>;
 
@@ -504,33 +504,121 @@ export function getServersAtScope(
   });
 }
 
+/** Scope precedence for MCP server inheritance (MCP-004). */
+export const MCP_SCOPE_PRECEDENCE: readonly McpScope[] = ["org", "team", "project", "user"];
+
+/** Returns precedence index for a scope (higher = more specific). */
+export function mcpScopePrecedence(scope: McpScope): number {
+  return MCP_SCOPE_PRECEDENCE.indexOf(scope);
+}
+
+export interface McpScopeContext {
+  orgId?: string;
+  teamId?: string;
+  projectId?: string;
+  userId?: string;
+}
+
 /**
- * Resolve effective servers with scope inheritance (MCP-004).
- * Lower scopes override higher scopes for the same server ID.
+ * Scope chain (least to most specific) for a target scope.
+ */
+export function getMcpScopeChain(targetScope: McpScope): McpScope[] {
+  const targetIndex = mcpScopePrecedence(targetScope);
+  if (targetIndex < 0) return [];
+  return MCP_SCOPE_PRECEDENCE.slice(0, targetIndex + 1);
+}
+
+/**
+ * Returns true if a server applies to the given scope context.
+ */
+export function serverAppliesToScope(server: McpServer, context: McpScopeContext): boolean {
+  switch (server.scope) {
+    case "org":
+      return !server.scopeId || server.scopeId === context.orgId;
+    case "team":
+      return !server.scopeId || server.scopeId === context.teamId;
+    case "project":
+      return !server.scopeId || server.scopeId === context.projectId;
+    case "user":
+      return !server.scopeId || server.scopeId === context.userId;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Resolve effective servers with deterministic scope inheritance (MCP-004).
+ *
+ * Conflict resolution for identical server IDs:
+ * 1. Higher scope precedence wins: user > project > team > org
+ * 2. Within same scope: newer `updatedAt` wins
+ * 3. Then newer `registeredAt` wins
+ * 4. Finally, stable lexical sort by id/scope/scopeId for deterministic behavior
+ */
+export function resolveInheritedMcpServers(
+  servers: McpServer[],
+  targetScope: McpScope,
+  context: McpScopeContext = {},
+): McpServer[] {
+  const applicableScopes = new Set(getMcpScopeChain(targetScope));
+
+  const applicable = servers
+    .filter((server) => applicableScopes.has(server.scope) && serverAppliesToScope(server, context))
+    .sort((a, b) => {
+      const idCompare = a.id.localeCompare(b.id);
+      if (idCompare !== 0) return idCompare;
+
+      const scopeCompare = mcpScopePrecedence(a.scope) - mcpScopePrecedence(b.scope);
+      if (scopeCompare !== 0) return scopeCompare;
+
+      const aUpdated = Date.parse(a.updatedAt ?? "");
+      const bUpdated = Date.parse(b.updatedAt ?? "");
+      if (!Number.isNaN(aUpdated) && !Number.isNaN(bUpdated) && aUpdated !== bUpdated) {
+        return aUpdated - bUpdated;
+      }
+
+      const aRegistered = Date.parse(a.registeredAt ?? "");
+      const bRegistered = Date.parse(b.registeredAt ?? "");
+      if (!Number.isNaN(aRegistered) && !Number.isNaN(bRegistered) && aRegistered !== bRegistered) {
+        return aRegistered - bRegistered;
+      }
+
+      return (a.scopeId ?? "").localeCompare(b.scopeId ?? "");
+    });
+
+  const byId = new Map<string, McpServer>();
+
+  for (const server of applicable) {
+    byId.set(server.id, server);
+  }
+
+  return Array.from(byId.values()).filter((s) => s.enabled);
+}
+
+/**
+ * Integration helper: resolve effective server list for a scope from flat registry data.
+ */
+export function getEffectiveServersForScope(
+  servers: McpServer[],
+  targetScope: McpScope,
+  context: McpScopeContext = {},
+): McpServer[] {
+  return resolveInheritedMcpServers(servers, targetScope, context);
+}
+
+/**
+ * Backward-compatible resolver for explicit org/team/project buckets.
  */
 export function resolveEffectiveServers(
   orgServers: McpServer[],
   teamServers: McpServer[],
   projectServers: McpServer[],
+  userServers: McpServer[] = [],
 ): McpServer[] {
-  const byId = new Map<string, McpServer>();
-
-  // Add org-level servers first
-  for (const server of orgServers) {
-    byId.set(server.id, server);
-  }
-
-  // Team servers override org
-  for (const server of teamServers) {
-    byId.set(server.id, server);
-  }
-
-  // Project servers override team/org
-  for (const server of projectServers) {
-    byId.set(server.id, server);
-  }
-
-  return Array.from(byId.values()).filter((s) => s.enabled);
+  return resolveInheritedMcpServers(
+    [...orgServers, ...teamServers, ...projectServers, ...userServers],
+    userServers.length > 0 ? "user" : "project",
+  );
 }
 
 /**

@@ -223,6 +223,7 @@ export type {
   McpHealthState,
   McpHealthStatus,
   McpScope,
+  McpScopeContext,
   McpServer,
   McpTransport,
   McpValidationResult,
@@ -231,8 +232,11 @@ export type {
   OrphanCheckResult,
 } from "./mcp-schema.js";
 export {
+  getEffectiveServersForScope,
+  getMcpScopeChain,
   getServersAtScope,
   isServerHealthy,
+  MCP_SCOPE_PRECEDENCE,
   McpAuditEntrySchema,
   McpAuditOperationSchema,
   McpCredentialRefSchema,
@@ -242,10 +246,13 @@ export {
   McpServerSchema,
   McpTransportSchema,
   McpVersionPinSchema,
+  mcpScopePrecedence,
   normalizeMcpServerCredentials,
   parseServerId,
   resolveEffectiveServers,
+  resolveInheritedMcpServers,
   resolveMcpCredentialValue,
+  serverAppliesToScope,
   validateMcpServer,
 } from "./mcp-schema.js";
 export type { FieldIssue } from "./parse.js";

@@ -34,3 +34,20 @@ No implicit cross-org, cross-project, or cross-session leakage is allowed.
 Memory scope is write-time immutable.
 
 If a record with the same id already exists, attempting to write it with a different scope must fail.
+
+## Audit Trail (MEM-012)
+
+Memory stores can optionally emit audit entries for every memory operation by passing
+`auditStorage` in `MemoryStoreRuntimeOptions`.
+
+Recorded operations:
+
+- `memory.init`
+- `memory.write`
+- `memory.listByScope`
+- `memory.getById`
+- `memory.getByKey`
+- `memory.pruneExpired`
+
+Audit entries use category `memory`, target type `memory`, and include operation metadata
+(result counts, scope/context, and lookup outcomes where relevant).

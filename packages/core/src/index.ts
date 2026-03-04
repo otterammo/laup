@@ -54,6 +54,18 @@ export {
   TieredCache,
 } from "./cache.js";
 export type {
+  FallbackPricing,
+  LlmCostBreakdown,
+  MissingPriceStrategy,
+  UsageCostTotals,
+  UsageEventCost,
+} from "./cost-conversion.js";
+export {
+  CostConversionService,
+  createCostConversionService,
+  PriceUnavailableError,
+} from "./cost-conversion.js";
+export type {
   BudgetAlert,
   CostCap,
   CostSummary,
@@ -432,6 +444,15 @@ export {
   validatePolicyJson,
   validatePolicyYaml,
 } from "./policy/index.js";
+export type {
+  InMemoryPricingProviderOptions,
+  PricingProvider,
+  PricingRefreshResult,
+} from "./pricing-provider.js";
+export {
+  createPricingProvider,
+  InMemoryPricingProvider,
+} from "./pricing-provider.js";
 export type {
   AggregateFunction,
   AggregateSpec,

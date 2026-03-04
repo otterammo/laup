@@ -30,7 +30,7 @@ One source of truth. One command to propagate.
 
 ```bash
 # Build from source
-git clone https://github.com/your-org/laup
+git clone https://github.com/otterammo/laup
 cd laup
 pnpm install
 pnpm run build
@@ -68,7 +68,7 @@ tools:
       - "src/**/*.ts"
     alwaysApply: false
   aider:
-    model: claude-sonnet-4-6
+    model: claude-sonnet-4
     autoCommits: false
   claude-code:
     deniedTools:
@@ -133,19 +133,28 @@ laup validate --source laup.md && laup sync --source laup.md
 | `claude-code` | `CLAUDE.md` | Markdown pass-through |
 | `cursor` | `.cursorrules`, `.cursor/rules/laup.mdc` | Legacy Markdown + MDC (dual-format) |
 | `aider` | `.aider.conf.yml`, `CONVENTIONS.md` | YAML config + Markdown conventions |
+| `codex` | `AGENTS.md` | Markdown pass-through (agents.md style) |
+| `opencode` | `AGENTS.md`, `.opencode.json` (optional) | Markdown + JSON config |
+| `copilot` | `.github/copilot-instructions.md` | GitHub Copilot repository instructions |
+
+> Note: `codex` and `opencode` both target `AGENTS.md`. If you enable both in one sync run,
+> whichever adapter writes last will win for that file.
 
 ## Repository Structure
 
 ```text
 laup/
 |-- packages/
-|   |-- core/                # Canonical schema, ToolAdapter interface, parse/validate
+|   |-- core/                # Schemas, parsing/validation, policy/auth/security modules
 |   |-- config-hub/          # SyncEngine - orchestrates adapters
 |   |-- cli/                 # laup CLI (laup sync, laup validate)
 |   `-- adapters/
 |       |-- claude-code/     # CLAUDE.md renderer
 |       |-- cursor/          # .cursorrules + .cursor/rules/laup.mdc renderer
-|       `-- aider/           # .aider.conf.yml + CONVENTIONS.md renderer
+|       |-- aider/           # .aider.conf.yml + CONVENTIONS.md renderer
+|       |-- codex/           # AGENTS.md renderer
+|       |-- opencode/        # AGENTS.md + optional .opencode.json renderer
+|       `-- copilot/         # .github/copilot-instructions.md renderer
 |-- infra/
 |   `-- docker-compose.yml   # PostgreSQL+pgvector, Redis, Vault (for Phase 2)
 `-- docs/                    # Architecture and requirements docs
@@ -156,7 +165,7 @@ laup/
 ```bash
 pnpm install               # Install dependencies
 pnpm run build             # Compile all packages
-pnpm run test:run          # Run all tests (74 tests, run from root)
+pnpm run test:run          # Run all tests from repo root
 pnpm run typecheck         # TypeScript strict check across all packages
 pnpm run lint              # Markdown + machine-readable + Biome checks
 pnpm run lint:md           # Markdown and MDC checks only

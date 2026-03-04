@@ -52,6 +52,21 @@ EOF
 node packages/cli/dist/bin.js sync --source laup.md --tools claude-code,cursor,aider
 ```
 
+## Interactive Tutorial
+
+Run a guided hands-on walkthrough that creates an isolated temporary workspace and explores
+validation, sync preview, diff mode, include expansion, hierarchy inheritance, scope merging,
+and import:
+
+```bash
+scripts/tutorial.sh
+```
+
+Useful options:
+
+- `scripts/tutorial.sh --auto` runs without pause prompts
+- `scripts/tutorial.sh --keep` keeps the temporary workspace for inspection
+
 ## Canonical Instruction File Format
 
 `laup.md` uses standard Markdown with an optional YAML frontmatter block.

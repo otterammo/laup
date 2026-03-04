@@ -19,7 +19,8 @@
     "lint:frontmatter": "node scripts/lint-frontmatter.mjs",
     "lint:yaml": "node scripts/lint-yaml.mjs",
     "lint:yaml:fix": "node scripts/lint-yaml.mjs --fix",
-    "lint:machine": "pnpm run lint:yaml && pnpm run lint:frontmatter && pnpm run lint:biome"
+    "lint:machine": "pnpm run lint:yaml && pnpm run lint:frontmatter && pnpm run lint:biome",
+    "tutorial": "scripts/tutorial.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",

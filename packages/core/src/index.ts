@@ -188,6 +188,17 @@ export {
   MemoryJobQueue,
 } from "./job-queue.js";
 export type {
+  McpPropagationOptions,
+  McpPropagationReport,
+  McpPropagationTarget,
+  McpPropagationTargetStatus,
+  McpSloMeasurement,
+} from "./mcp-propagation.js";
+export {
+  McpPropagationService,
+  measureMcpPropagationSlo,
+} from "./mcp-propagation.js";
+export type {
   McpAuditEntry,
   McpAuditOperation,
   McpCredentialRef,
@@ -533,6 +544,18 @@ export {
   satisfiesConstraint,
   sortVersionsDesc,
 } from "./skill-version.js";
+export type {
+  AdapterUsageContract,
+  AdapterUsageEmitter,
+  UsageCollectionInput,
+  UsageCollector,
+  UsageCollectorOptions,
+  UsageEventInputMap,
+} from "./usage-collector.js";
+export {
+  createAdapterUsageEmitter,
+  createUsageCollector,
+} from "./usage-collector.js";
 export type {
   AggregatedUsage,
   PaginatedResult,

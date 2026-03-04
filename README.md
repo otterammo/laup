@@ -196,6 +196,8 @@ See [docs/skill-history.md](docs/skill-history.md) for SKILL-011 installation/us
 storage and retention policy.
 See [docs/memory-semantic-retrieval.md](docs/memory-semantic-retrieval.md) for MEM-002
 semantic retrieval behavior and API usage.
+See [docs/context-packet-format.md](docs/context-packet-format.md) for HAND-001
+standard context packet format requirements.
 
 ## Roadmap
 

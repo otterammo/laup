@@ -492,6 +492,12 @@ export {
   SqlMemoryStore,
 } from "./memory-store.js";
 export type {
+  MemorySummarizationPipelineOptions,
+  MemorySummarizationProjectConfig,
+  MemorySummarizationRunResult,
+} from "./memory-summarization.js";
+export { MemorySummarizationPipeline } from "./memory-summarization.js";
+export type {
   ZepAddMemoryParams,
   ZepCompatibleMemoryClient,
   ZepContextResolver,

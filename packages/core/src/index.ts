@@ -78,6 +78,20 @@ export {
   serializeCursorContextForTransport,
 } from "./context-packet-serializers.js";
 export type {
+  CostAnomaly,
+  CostAnomalyChannel,
+  CostAnomalyDetectionReport,
+  CostAnomalyDimension,
+} from "./cost-anomaly.js";
+export {
+  CostAnomalyChannelSchema,
+  CostAnomalyDetectionReportSchema,
+  CostAnomalyDetector,
+  CostAnomalyDimensionSchema,
+  CostAnomalySchema,
+  createCostAnomalyDetector,
+} from "./cost-anomaly.js";
+export type {
   FallbackPricing,
   LlmCostBreakdown,
   MissingPriceStrategy,

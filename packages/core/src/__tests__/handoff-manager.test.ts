@@ -144,4 +144,23 @@ describe("handoff-manager (HAND-004)", () => {
       receivingTool: packet.receivingTool,
     });
   });
+
+  it("records included field list for partial handoff", async () => {
+    const manager = new HandoffManager();
+
+    const result = await manager.send(packet, {
+      sourceAgent: "sender-1",
+      targetAgent: "receiver-1",
+      mode: "sync",
+      include: ["task.type", "constraints"],
+      waitForAck: async () => ({
+        packetId: packet.packetId,
+        agentId: "receiver-1",
+        status: "accepted",
+        timestamp: "2026-03-05T07:00:15Z",
+      }),
+    });
+
+    expect(result.history.includedFields).toEqual(["task.type", "constraints"]);
+  });
 });

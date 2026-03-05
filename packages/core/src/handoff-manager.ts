@@ -4,7 +4,9 @@ import type {
   HandoffAck,
   HandoffHistoryEntry,
   HandoffMode,
+  IncomingContextPacket,
 } from "./handoff-schema.js";
+import { type ContextField, createPartialPacket } from "./handoff-schema.js";
 
 export class HandoffTimeoutError extends Error {
   readonly packetId: string;
@@ -26,6 +28,8 @@ export interface SendHandoffOptions {
   sourceAgent: string;
   targetAgent: string;
   waitForAck?: () => Promise<HandoffAck>;
+  /** Field paths to include for partial handoff (CLI/API --include support, HAND-009) */
+  include?: string[];
 }
 
 export interface SendHandoffResult {
@@ -53,6 +57,11 @@ export class HandoffManager {
     const timeoutSeconds = options.timeoutSeconds ?? 60;
     const createdAt = this.now().toISOString();
 
+    const includePaths = options.include?.filter((path) => path.trim().length > 0) ?? [];
+    const includeFields: ContextField[] = includePaths.map((path) => ({ path }));
+    const outboundPacket: ContextPacket | IncomingContextPacket =
+      includeFields.length > 0 ? createPartialPacket(packet, includeFields) : packet;
+
     const historyEntry: HandoffHistoryEntry = {
       id: `${packet.packetId}:${createdAt}`,
       packetId: packet.packetId,
@@ -63,7 +72,8 @@ export class HandoffManager {
       timestamps: {
         created: createdAt,
       },
-      packetSizeBytes: JSON.stringify(packet).length,
+      packetSizeBytes: JSON.stringify(outboundPacket).length,
+      ...(includePaths.length > 0 ? { includedFields: includePaths } : {}),
     };
 
     historyEntry.status = "sent";

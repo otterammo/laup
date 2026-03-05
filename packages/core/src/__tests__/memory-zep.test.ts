@@ -118,6 +118,36 @@ describe("ZepMemoryClient", () => {
     expect(extracted[0]?.content).toContain("my timezone is America/Chicago");
   });
 
+  it("supports category and tags in filters", async () => {
+    const store = new InMemoryMemoryStore();
+    await store.init();
+
+    const client = new ZepMemoryClient(
+      store as unknown as MemoryStore,
+      new DefaultZepContextResolver({ orgId: "org-1", projectId: "project-1" }),
+    );
+
+    await client.add_memory({
+      session_id: "session-filter",
+      memory: "Release deployment steps",
+      metadata: { category: "runbook", tags: ["release", "ops"] },
+    });
+    await client.add_memory({
+      session_id: "session-filter",
+      memory: "Weekend ideas",
+      metadata: { category: "notes", tags: ["personal"] },
+    });
+
+    const filtered = await client.search_memory({
+      session_id: "session-filter",
+      query: "release",
+      filters: { category: "runbook", tags: ["release"] },
+    });
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.content).toContain("Release");
+  });
+
   it("isolates memories by session id", async () => {
     const store = new InMemoryMemoryStore();
     await store.init();

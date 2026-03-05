@@ -180,6 +180,16 @@ export class ZepMemoryClient implements ZepCompatibleMemoryClient {
   async add_memory(params: ZepAddMemoryParams): Promise<ZepMemory[]> {
     const normalized = this.normalizeMemory(params.memory);
     const { context, scope } = this.resolver.resolve({ session_id: params.session_id });
+    const mergedMetadata = {
+      ...(params.metadata ? params.metadata : {}),
+    } as Record<string, unknown>;
+    const rawTags = mergedMetadata["tags"];
+    const tags =
+      Array.isArray(rawTags) && rawTags.every((tag) => typeof tag === "string")
+        ? (rawTags as string[])
+        : undefined;
+    const rawCategory = mergedMetadata["category"];
+    const category = typeof rawCategory === "string" ? rawCategory : undefined;
 
     const writes = normalized.map((entry) =>
       this.store.write({
@@ -187,6 +197,8 @@ export class ZepMemoryClient implements ZepCompatibleMemoryClient {
         scope,
         context,
         sourceToolId: "zep",
+        ...(tags ? { tags } : {}),
+        ...(category ? { category } : {}),
         metadata: {
           source: "zep",
           role: entry.role,
@@ -362,6 +374,17 @@ export class ZepMemoryClient implements ZepCompatibleMemoryClient {
     if (!filters) return true;
 
     for (const [key, value] of Object.entries(filters)) {
+      if (key === "category") {
+        if (record.category !== value) return false;
+        continue;
+      }
+      if (key === "tags") {
+        const wanted = Array.isArray(value) ? value : [value];
+        const tags = new Set(record.tags ?? []);
+        if (wanted.some((tag) => typeof tag !== "string" || !tags.has(tag))) return false;
+        continue;
+      }
+
       if (record.metadata?.[key] !== value) {
         return false;
       }

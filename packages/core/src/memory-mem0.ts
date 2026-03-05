@@ -92,12 +92,22 @@ export class Mem0MemoryClient implements Mem0CompatibleMemoryClient {
     });
 
     const resolvedScope = scope ?? this.pickScope(context);
+    const rawTags = params?.metadata?.["tags"];
+    const tags =
+      Array.isArray(rawTags) && rawTags.every((tag) => typeof tag === "string")
+        ? (rawTags as string[])
+        : undefined;
+    const rawCategory = params?.metadata?.["category"];
+    const category = typeof rawCategory === "string" ? rawCategory : undefined;
+
     const writes = normalized.map((message) =>
       this.store.write({
         content: message.content,
         scope: resolvedScope,
         context,
         sourceToolId: "mem0",
+        ...(tags ? { tags } : {}),
+        ...(category ? { category } : {}),
         metadata: {
           source: "mem0",
           role: message.role,
@@ -193,6 +203,17 @@ export class Mem0MemoryClient implements Mem0CompatibleMemoryClient {
   private matchesFilters(record: MemoryRecord, filters?: Record<string, unknown>): boolean {
     if (!filters) return true;
     for (const [key, value] of Object.entries(filters)) {
+      if (key === "category") {
+        if (record.category !== value) return false;
+        continue;
+      }
+      if (key === "tags") {
+        const wanted = Array.isArray(value) ? value : [value];
+        const tags = new Set(record.tags ?? []);
+        if (wanted.some((tag) => typeof tag !== "string" || !tags.has(tag))) return false;
+        continue;
+      }
+
       const metadataValue = record.metadata?.[key];
       if (metadataValue !== value) {
         return false;

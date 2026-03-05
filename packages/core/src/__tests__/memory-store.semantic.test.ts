@@ -80,6 +80,51 @@ describe("memory-store semantic retrieval", () => {
     expect(results[0]?.score).toBeGreaterThan(results[1]?.score ?? 0);
   });
 
+  it("supports filtered retrieval by tags and category", async () => {
+    const provider = new KeywordEmbeddingProvider(["deploy", "incident", "travel"]);
+    const store = createSemanticMemoryStore({ embeddingProvider: provider });
+
+    await store.writeBatch([
+      {
+        id: "m1",
+        content: "Deploy the release candidate",
+        scope: "project",
+        context: PROJECT_CONTEXT,
+        tags: ["release", "ops"],
+        category: "runbook",
+      },
+      {
+        id: "m2",
+        content: "Incident retrospective and remediation",
+        scope: "project",
+        context: PROJECT_CONTEXT,
+        tags: ["incident"],
+        category: "postmortem",
+      },
+      {
+        id: "m3",
+        content: "Travel planning notes",
+        scope: "project",
+        context: PROJECT_CONTEXT,
+        tags: ["personal"],
+        category: "notes",
+      },
+    ]);
+
+    const filtered = await store.semanticSearch("deploy", "project", PROJECT_CONTEXT, {
+      k: 10,
+      filter: { tags: ["release"], categories: ["runbook"] },
+    });
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.memory.id).toBe("m1");
+
+    const byCategory = await store.listByScope("project", PROJECT_CONTEXT, {
+      filter: { categories: ["postmortem"] },
+    });
+    expect(byCategory.map((item) => item.id)).toEqual(["m2"]);
+  });
+
   it("uses configurable top-k with default=10", async () => {
     const provider = new KeywordEmbeddingProvider(["task"]);
     const store = createSemanticMemoryStore({ embeddingProvider: provider });

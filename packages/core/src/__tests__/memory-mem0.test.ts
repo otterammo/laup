@@ -68,6 +68,34 @@ describe("Mem0MemoryClient", () => {
     expect(results[0]?.score).toBeGreaterThan(0);
   });
 
+  it("supports category/tags filters for retrieval", async () => {
+    const store = new InMemoryMemoryStore();
+    await store.init();
+
+    const client = new Mem0MemoryClient(
+      store as unknown as MemoryStore,
+      new DefaultMem0ContextResolver({ orgId: "org-default" }),
+    );
+
+    await client.add("Deploy release note", {
+      user_id: "org-1",
+      metadata: { env: "prod", tags: ["release", "ops"], category: "runbook" },
+    });
+    await client.add("Personal todo", {
+      user_id: "org-1",
+      metadata: { env: "prod", tags: ["personal"], category: "notes" },
+    });
+
+    const results = await client.search({
+      query: "deploy",
+      user_id: "org-1",
+      filters: { category: "runbook", tags: ["release"] },
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.memory).toContain("Deploy");
+  });
+
   it("deletes memories by id with either string id or params object", async () => {
     const store = new InMemoryMemoryStore();
     await store.init();

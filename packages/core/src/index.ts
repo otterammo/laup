@@ -181,6 +181,18 @@ export {
   Migrator,
 } from "./db-migrations.js";
 export type {
+  HandoffQueue,
+  HandoffQueueOptions,
+  HandoffQueuePacketStatus,
+  HandoffQueueRecord,
+  HandoffSubscriber,
+} from "./handoff-queue.js";
+export {
+  createHandoffQueue,
+  InMemoryHandoffQueue,
+  MIN_HANDOFF_RETENTION_MS,
+} from "./handoff-queue.js";
+export type {
   HandoffRoutingCandidate,
   HandoffRoutingDecision as ResolvedHandoffRoutingDecision,
   HandoffRoutingPolicyConfig,

@@ -29,6 +29,18 @@ Broader-scope visibility must be explicit via `includeSharedFromBroaderScopes: t
 
 No implicit cross-org, cross-project, or cross-session leakage is allowed.
 
+## Cross-tool Context Sharing (MEM-004)
+
+Memory entries are shared across tools within the same scope context (`org`, `project`,
+`session`) as soon as they are written.
+
+- Every entry records a `sourceToolId` (defaults to `"unknown"` if omitted)
+- Reads can optionally pass `requestingToolId` via `MemoryReadOptions`
+- Cross-tool reads are audit-visible via metadata fields:
+  - `requestingToolId`
+  - `sourceToolId`
+  - `crossToolRead` (`true` when reader and writer tool ids differ)
+
 ## Immutability
 
 Memory scope is write-time immutable.

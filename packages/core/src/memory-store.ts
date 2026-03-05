@@ -74,6 +74,7 @@ export type MemoryConflictResolutionAction = "accept-incoming" | "keep-existing"
 
 export interface MemoryReadOptions {
   includeSharedFromBroaderScopes?: boolean;
+  requestingToolId?: string;
   now?: Date;
 }
 
@@ -307,6 +308,7 @@ export class InMemoryMemoryStore implements MemoryStore {
       this.conflictResolutionByProject?.(input.context) ?? this.conflictResolutionStrategy;
 
     const scopeContext = buildScopeContext(input.scope, input.context);
+    const sourceToolId = input.sourceToolId ?? "unknown";
 
     let id = requestedId;
     let existing = this.records.get(id);
@@ -387,7 +389,7 @@ export class InMemoryMemoryStore implements MemoryStore {
       ...scopeContext,
       ...(expiresAt ? { expiresAt } : {}),
       ...(input.metadata ? { metadata: input.metadata } : {}),
-      ...(input.sourceToolId ? { sourceToolId: input.sourceToolId } : {}),
+      sourceToolId,
     };
 
     if (existing?.key && existing.key !== nextKey) {
@@ -407,6 +409,7 @@ export class InMemoryMemoryStore implements MemoryStore {
         projectId: scopeContext.projectId,
         sessionId: scopeContext.sessionId,
         key: nextKey,
+        sourceToolId,
       },
     });
 
@@ -426,6 +429,7 @@ export class InMemoryMemoryStore implements MemoryStore {
   ): Promise<MemoryRecord[]> {
     const now = options?.now ?? new Date();
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
+    const requestingToolId = options?.requestingToolId;
 
     const records = Array.from(this.records.values())
       .filter((record) => !isExpired(record, now))
@@ -440,6 +444,7 @@ export class InMemoryMemoryStore implements MemoryStore {
         projectId: context.projectId,
         sessionId: context.sessionId,
         includeSharedFromBroaderScopes: includeShared,
+        requestingToolId,
         resultCount: records.length,
       },
     });
@@ -454,6 +459,7 @@ export class InMemoryMemoryStore implements MemoryStore {
   ): Promise<MemoryRecord | null> {
     const now = options?.now ?? new Date();
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
+    const requestingToolId = options?.requestingToolId;
     const record = this.records.get(id);
     if (!record || isExpired(record, now)) {
       await this.auditLogger.record({
@@ -479,6 +485,11 @@ export class InMemoryMemoryStore implements MemoryStore {
         projectId: context.projectId,
         sessionId: context.sessionId,
         includeSharedFromBroaderScopes: includeShared,
+        requestingToolId,
+        sourceToolId: record.sourceToolId,
+        crossToolRead: Boolean(
+          result && requestingToolId && record.sourceToolId !== requestingToolId,
+        ),
       },
     });
 
@@ -490,6 +501,7 @@ export class InMemoryMemoryStore implements MemoryStore {
     context: MemoryContext,
     options?: MemoryReadOptions,
   ): Promise<MemoryRecord | null> {
+    const requestingToolId = options?.requestingToolId;
     const sessionContext: Pick<MemoryRecord, "orgId" | "projectId" | "sessionId"> = {
       orgId: context.orgId,
       ...(context.projectId ? { projectId: context.projectId } : {}),
@@ -509,7 +521,17 @@ export class InMemoryMemoryStore implements MemoryStore {
       await this.auditLogger.record({
         action: "memory.getByKey",
         ...(result?.id ? { targetId: result.id } : {}),
-        metadata: { key, orgId: context.orgId, found: Boolean(result), scope: "session" },
+        metadata: {
+          key,
+          orgId: context.orgId,
+          found: Boolean(result),
+          scope: "session",
+          requestingToolId,
+          sourceToolId: result?.sourceToolId,
+          crossToolRead: Boolean(
+            result && requestingToolId && result.sourceToolId !== requestingToolId,
+          ),
+        },
       });
       return result;
     }
@@ -520,7 +542,17 @@ export class InMemoryMemoryStore implements MemoryStore {
       await this.auditLogger.record({
         action: "memory.getByKey",
         ...(result?.id ? { targetId: result.id } : {}),
-        metadata: { key, orgId: context.orgId, found: Boolean(result), scope: "project" },
+        metadata: {
+          key,
+          orgId: context.orgId,
+          found: Boolean(result),
+          scope: "project",
+          requestingToolId,
+          sourceToolId: result?.sourceToolId,
+          crossToolRead: Boolean(
+            result && requestingToolId && result.sourceToolId !== requestingToolId,
+          ),
+        },
       });
       return result;
     }
@@ -531,7 +563,17 @@ export class InMemoryMemoryStore implements MemoryStore {
       await this.auditLogger.record({
         action: "memory.getByKey",
         ...(result?.id ? { targetId: result.id } : {}),
-        metadata: { key, orgId: context.orgId, found: Boolean(result), scope: "org" },
+        metadata: {
+          key,
+          orgId: context.orgId,
+          found: Boolean(result),
+          scope: "org",
+          requestingToolId,
+          sourceToolId: result?.sourceToolId,
+          crossToolRead: Boolean(
+            result && requestingToolId && result.sourceToolId !== requestingToolId,
+          ),
+        },
       });
       return result;
     }
@@ -763,6 +805,7 @@ export class SqlMemoryStore implements MemoryStore {
     }
 
     const scopeContext = buildScopeContext(input.scope, input.context);
+    const sourceToolId = input.sourceToolId ?? "unknown";
     const expiresAt =
       input.scope === "session" ? new Date(now.getTime() + SESSION_TTL_MS).toISOString() : null;
     const createdAt = existing?.created_at ?? now.toISOString();
@@ -838,7 +881,7 @@ export class SqlMemoryStore implements MemoryStore {
         scopeContext.projectId ?? null,
         scopeContext.sessionId ?? null,
         input.metadata ? JSON.stringify(input.metadata) : null,
-        input.sourceToolId ?? null,
+        sourceToolId,
         JSON.stringify(embedding),
         embeddingModel,
         createdAt,
@@ -857,7 +900,7 @@ export class SqlMemoryStore implements MemoryStore {
       createdAt,
       ...(expiresAt ? { expiresAt } : {}),
       ...(input.metadata ? { metadata: input.metadata } : {}),
-      ...(input.sourceToolId ? { sourceToolId: input.sourceToolId } : {}),
+      sourceToolId,
       embedding,
       embeddingModel,
     };
@@ -871,6 +914,7 @@ export class SqlMemoryStore implements MemoryStore {
         projectId: scopeContext.projectId,
         sessionId: scopeContext.sessionId,
         key,
+        sourceToolId,
       },
     });
 
@@ -890,6 +934,7 @@ export class SqlMemoryStore implements MemoryStore {
   ): Promise<MemoryRecord[]> {
     const now = (options?.now ?? new Date()).toISOString();
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
+    const requestingToolId = options?.requestingToolId;
 
     const allowedScopes: MemoryScope[] = includeShared
       ? scope === "session"
@@ -933,6 +978,7 @@ export class SqlMemoryStore implements MemoryStore {
         projectId: context.projectId,
         sessionId: context.sessionId,
         includeSharedFromBroaderScopes: includeShared,
+        requestingToolId,
         resultCount: records.length,
       },
     });
@@ -947,6 +993,7 @@ export class SqlMemoryStore implements MemoryStore {
   ): Promise<MemoryRecord | null> {
     const now = options?.now ?? new Date();
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
+    const requestingToolId = options?.requestingToolId;
 
     const row = await this.db.queryOne<MemoryRow>(
       `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, source_tool_id, embedding, embedding_model, created_at, expires_at
@@ -990,6 +1037,11 @@ export class SqlMemoryStore implements MemoryStore {
         projectId: context.projectId,
         sessionId: context.sessionId,
         includeSharedFromBroaderScopes: includeShared,
+        requestingToolId,
+        sourceToolId: record.sourceToolId,
+        crossToolRead: Boolean(
+          visibleRecord && requestingToolId && record.sourceToolId !== requestingToolId,
+        ),
       },
     });
 
@@ -1003,6 +1055,7 @@ export class SqlMemoryStore implements MemoryStore {
   ): Promise<MemoryRecord | null> {
     const now = options?.now ?? new Date();
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
+    const requestingToolId = options?.requestingToolId;
 
     const row = await this.db.queryOne<MemoryRow>(
       `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, source_tool_id, embedding, embedding_model, created_at, expires_at
@@ -1066,6 +1119,11 @@ export class SqlMemoryStore implements MemoryStore {
         orgId: context.orgId,
         found: Boolean(visibleRecord),
         includeSharedFromBroaderScopes: includeShared,
+        requestingToolId,
+        sourceToolId: record.sourceToolId,
+        crossToolRead: Boolean(
+          visibleRecord && requestingToolId && record.sourceToolId !== requestingToolId,
+        ),
       },
     });
 
@@ -1238,7 +1296,7 @@ export class SqlMemoryStore implements MemoryStore {
       createdAt: String(row.created_at),
       ...(row.expires_at ? { expiresAt: String(row.expires_at) } : {}),
       ...(metadata ? { metadata } : {}),
-      ...(row.source_tool_id ? { sourceToolId: String(row.source_tool_id) } : {}),
+      sourceToolId: row.source_tool_id ? String(row.source_tool_id) : "unknown",
       ...(embedding ? { embedding } : {}),
       ...(row.embedding_model ? { embeddingModel: String(row.embedding_model) } : {}),
     };

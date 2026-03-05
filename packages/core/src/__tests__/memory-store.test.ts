@@ -289,6 +289,58 @@ describe("memory-store", () => {
     ).rejects.toThrow(/different scope|already in use|unique/i);
   });
 
+  it("supports cross-tool reads in the same scope and audits them", async () => {
+    const auditStorage = new InMemoryAuditStorage();
+    await auditStorage.init();
+
+    const crossToolStore = new InMemoryMemoryStore({
+      auditStorage,
+      auditActor: "tester",
+    });
+    await crossToolStore.init();
+
+    await crossToolStore.write({
+      id: "cross-tool-memory",
+      content: "Shared deployment context",
+      scope: "project",
+      context,
+      sourceToolId: "claude-code",
+    });
+
+    const readByCursor = await crossToolStore.listByScope("project", context, {
+      requestingToolId: "cursor",
+    });
+
+    expect(readByCursor).toHaveLength(1);
+    expect(readByCursor[0]?.sourceToolId).toBe("claude-code");
+
+    await crossToolStore.getById("cross-tool-memory", context, {
+      requestingToolId: "cursor",
+    });
+
+    const page = await auditStorage.query({ category: "memory", actor: "tester" }, 100, 0);
+    const crossToolAudit = page.entries.find(
+      (entry) =>
+        entry.action === "memory.getById" &&
+        (entry.metadata?.["crossToolRead"] as boolean | undefined) === true,
+    );
+
+    expect(crossToolAudit).toBeDefined();
+    expect(crossToolAudit?.metadata?.["requestingToolId"]).toBe("cursor");
+    expect(crossToolAudit?.metadata?.["sourceToolId"]).toBe("claude-code");
+  });
+
+  it("defaults sourceToolId to unknown when omitted", async () => {
+    const record = await store.write({
+      id: "unknown-source",
+      content: "no source provided",
+      scope: "project",
+      context,
+    });
+
+    expect(record.sourceToolId).toBe("unknown");
+  });
+
   it("records an audit trail for memory operations", async () => {
     const auditStorage = new InMemoryAuditStorage();
     await auditStorage.init();
@@ -332,39 +384,5 @@ describe("memory-store", () => {
     expect(actions).toContain("memory.getByKey");
     expect(actions).toContain("memory.pruneExpired");
     expect(actions).toContain("memory.conflict");
-  });
-
-  it("records an audit trail for memory operations", async () => {
-    const auditStorage = new InMemoryAuditStorage();
-    await auditStorage.init();
-
-    const auditedStore = new InMemoryMemoryStore({
-      auditStorage,
-      auditActor: "tester",
-    });
-    await auditedStore.init();
-
-    await auditedStore.write({
-      id: "audited-memory",
-      key: "checklist",
-      content: "Run post-deploy smoke checks",
-      scope: "project",
-      context,
-    });
-
-    await auditedStore.listByScope("project", context);
-    await auditedStore.getById("audited-memory", context);
-    await auditedStore.getByKey("checklist", context);
-    await auditedStore.pruneExpired(new Date("2030-01-01T00:00:00.000Z"));
-
-    const page = await auditStorage.query({ category: "memory", actor: "tester" }, 50, 0);
-    const actions = page.entries.map((entry) => entry.action);
-
-    expect(actions).toContain("memory.init");
-    expect(actions).toContain("memory.write");
-    expect(actions).toContain("memory.listByScope");
-    expect(actions).toContain("memory.getById");
-    expect(actions).toContain("memory.getByKey");
-    expect(actions).toContain("memory.pruneExpired");
   });
 });

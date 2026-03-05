@@ -104,6 +104,7 @@ pnpm run lint:md           # Markdown and MDC rules
 pnpm run lint:machine      # YAML + frontmatter + JSON/JSONC checks
 pnpm run lint:yaml         # YAML parser/style checks
 pnpm run lint:frontmatter  # Markdown/MDC frontmatter checks
+pnpm run verify:local      # Changed-scope local verification gate
 ```
 
 Linting is blocking in CI and pre-commit. `lint-staged` runs on changed files:

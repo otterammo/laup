@@ -341,6 +341,13 @@ export const CostCapSchema = z.object({
 
 export type CostCap = z.infer<typeof CostCapSchema>;
 
+export interface CostCapEvaluation {
+  applies: boolean;
+  exceeded: boolean;
+  action: CostCap["action"] | null;
+  shouldEnforce: boolean;
+}
+
 /**
  * Cost summary for a time period (COST-006).
  */
@@ -408,10 +415,58 @@ export function calculateLlmCost(usage: LlmUsage, pricing: ModelPricing): number
 }
 
 /**
+ * Check whether an event attribution is within a cap scope.
+ */
+export function matchesCostCapScope(
+  scope: UsageAttribution,
+  attribution: UsageAttribution,
+): boolean {
+  return Object.entries(scope).every(([key, value]) => {
+    if (value === undefined) {
+      return true;
+    }
+
+    return attribution[key as keyof UsageAttribution] === value;
+  });
+}
+
+/**
+ * Evaluate a cost cap against current spend and attribution context.
+ */
+export function evaluateCostCap(
+  currentCost: number,
+  cap: CostCap,
+  attribution?: UsageAttribution,
+): CostCapEvaluation {
+  if (!cap.enabled) {
+    return {
+      applies: false,
+      exceeded: false,
+      action: null,
+      shouldEnforce: false,
+    };
+  }
+
+  const applies = attribution ? matchesCostCapScope(cap.scope, attribution) : true;
+  const exceeded = applies && currentCost >= cap.maxAmount;
+
+  return {
+    applies,
+    exceeded,
+    action: exceeded ? cap.action : null,
+    shouldEnforce: exceeded && cap.action !== "warn",
+  };
+}
+
+/**
  * Check if a cost cap is exceeded.
  */
-export function isCostCapExceeded(currentCost: number, cap: CostCap): boolean {
-  return cap.enabled && currentCost >= cap.maxAmount;
+export function isCostCapExceeded(
+  currentCost: number,
+  cap: CostCap,
+  attribution?: UsageAttribution,
+): boolean {
+  return evaluateCostCap(currentCost, cap, attribution).exceeded;
 }
 
 /**

@@ -111,7 +111,7 @@ describe("memory-store export", () => {
     const secondRows = JSON.parse(secondPage.data) as Array<Record<string, unknown>>;
 
     expect(secondRows).toHaveLength(1);
-    expect(secondRows[0]?.id).toBe("mem-project-2");
+    expect(secondRows[0]?.["id"]).toBe("mem-project-2");
     expect(secondPage.nextCursor).toBeUndefined();
   });
 

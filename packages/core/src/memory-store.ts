@@ -1429,7 +1429,7 @@ function getExportScopes(context: MemoryContext, scope?: MemoryScope): MemorySco
 
 function toExportRow(record: MemoryRecord): Record<string, unknown> {
   const metadata = record.metadata ?? {};
-  const metadataLastAccessed = metadata.lastAccessedAt;
+  const metadataLastAccessed = metadata["lastAccessedAt"];
 
   return {
     id: record.id,

@@ -34,6 +34,13 @@ export interface ZepGetMemoryParams {
   limit?: number;
 }
 
+export interface ZepExtractMemoryParams {
+  session_id: string;
+  transcript: string | ZepMessage | ZepMessage[];
+  metadata?: Record<string, unknown>;
+  limit?: number;
+}
+
 export interface ZepContextResolver {
   resolve(params: { session_id: string }): {
     context: MemoryContext;
@@ -51,6 +58,10 @@ export interface ZepSessionMemoryClient {
     options?: { limit?: number; filters?: Record<string, unknown> },
   ): Promise<ZepMemory[]>;
   get_memory(memory_id?: string): Promise<ZepMemory[] | ZepMemory | null>;
+  extract_memory(
+    transcript: string | ZepMessage | ZepMessage[],
+    options?: { metadata?: Record<string, unknown>; limit?: number },
+  ): Promise<ZepMemory[]>;
 }
 
 export interface ZepCompatibleMemoryClient {
@@ -58,6 +69,7 @@ export interface ZepCompatibleMemoryClient {
   add_memory(params: ZepAddMemoryParams): Promise<ZepMemory[]>;
   search_memory(params: ZepSearchMemoryParams): Promise<ZepMemory[]>;
   get_memory(params: ZepGetMemoryParams): Promise<ZepMemory[] | ZepMemory | null>;
+  extract_memory(params: ZepExtractMemoryParams): Promise<ZepMemory[]>;
 }
 
 export class DefaultZepContextResolver implements ZepContextResolver {
@@ -141,6 +153,18 @@ class BoundZepSessionMemoryClient implements ZepSessionMemoryClient {
       ...(memory_id ? { memory_id } : {}),
     });
   }
+
+  extract_memory(
+    transcript: string | ZepMessage | ZepMessage[],
+    options?: { metadata?: Record<string, unknown>; limit?: number },
+  ): Promise<ZepMemory[]> {
+    return this.client.extract_memory({
+      session_id: this.sessionId,
+      transcript,
+      ...(options?.metadata ? { metadata: options.metadata } : {}),
+      ...(options?.limit ? { limit: options.limit } : {}),
+    });
+  }
 }
 
 export class ZepMemoryClient implements ZepCompatibleMemoryClient {
@@ -209,6 +233,32 @@ export class ZepMemoryClient implements ZepCompatibleMemoryClient {
     return sorted.slice(0, params.limit ?? 50).map((record) => this.toZepMemory(record));
   }
 
+  async extract_memory(params: ZepExtractMemoryParams): Promise<ZepMemory[]> {
+    const messages = this.normalizeMemory(params.transcript);
+    const facts = this.extractFacts(messages).slice(0, params.limit ?? 10);
+    const { context, scope } = this.resolver.resolve({ session_id: params.session_id });
+
+    const writes = facts.map((fact) =>
+      this.store.write({
+        content: fact.content,
+        scope,
+        context,
+        sourceToolId: "zep",
+        metadata: {
+          source: "zep",
+          role: fact.role,
+          extracted_from: "session-transcript",
+          extraction_method: "heuristic-v1",
+          transcript_turn: fact.turn,
+          ...(params.metadata ? params.metadata : {}),
+        },
+      }),
+    );
+
+    const records = await Promise.all(writes);
+    return records.map((record) => this.toZepMemory(record));
+  }
+
   private normalizeMemory(memory: string | ZepMessage | ZepMessage[]): ZepMessage[] {
     if (typeof memory === "string") {
       return [{ role: "user", content: memory }];
@@ -222,7 +272,7 @@ export class ZepMemoryClient implements ZepCompatibleMemoryClient {
   }
 
   private toZepMemory(record: MemoryRecord, score?: number): ZepMemory {
-    const roleValue = record.metadata?.["role"];
+    const roleValue = record.metadata?.role;
 
     return {
       uuid: record.id,
@@ -232,6 +282,62 @@ export class ZepMemoryClient implements ZepCompatibleMemoryClient {
       created_at: record.createdAt,
       ...(typeof score === "number" ? { score } : {}),
     };
+  }
+
+  private extractFacts(
+    messages: ZepMessage[],
+  ): Array<{ content: string; role: string; turn: number }> {
+    const candidates: Array<{ content: string; role: string; turn: number }> = [];
+
+    for (let index = 0; index < messages.length; index += 1) {
+      const message = messages[index];
+      if (!message) continue;
+
+      const role = message.role.trim().toLowerCase();
+      if (role !== "user" && role !== "assistant") continue;
+
+      const snippets = message.content
+        .split(/[\n.?!]+/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+      for (const snippet of snippets) {
+        if (!this.looksLikeMemoryFact(snippet, role)) continue;
+
+        const normalized = snippet
+          .replace(/^(please\s+)?remember\s+(that\s+)?/i, "")
+          .replace(/^note\s+that\s+/i, "")
+          .trim();
+
+        if (normalized.length < 8) continue;
+
+        candidates.push({
+          content: normalized,
+          role,
+          turn: index + 1,
+        });
+      }
+    }
+
+    const unique = new Map<string, { content: string; role: string; turn: number }>();
+    for (const item of candidates) {
+      const key = item.content.toLowerCase();
+      if (!unique.has(key)) {
+        unique.set(key, item);
+      }
+    }
+
+    return [...unique.values()];
+  }
+
+  private looksLikeMemoryFact(text: string, role: string): boolean {
+    if (role === "assistant") {
+      return /\b(you\s+(prefer|like|dislike|asked|want|need)|noted|remembered)\b/i.test(text);
+    }
+
+    return /\b(remember|prefer|like|dislike|always|never|my|i\s+am|i'm|call\s+me|timezone|allergic|deadline|working\s+on)\b/i.test(
+      text,
+    );
   }
 
   private score(record: MemoryRecord, query: string): number {

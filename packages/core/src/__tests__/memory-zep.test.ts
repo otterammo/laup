@@ -68,6 +68,56 @@ describe("ZepMemoryClient", () => {
     expect((one as { uuid: string }).uuid).toBe(firstAdded?.uuid);
   });
 
+  it("extracts durable facts from session transcripts", async () => {
+    const store = new InMemoryMemoryStore();
+    await store.init();
+
+    const client = new ZepMemoryClient(
+      store as unknown as MemoryStore,
+      new DefaultZepContextResolver({ orgId: "org-1", projectId: "project-1" }),
+    );
+
+    const extracted = await client.extract_memory({
+      session_id: "session-facts",
+      transcript: [
+        { role: "assistant", content: "How can I help today?" },
+        { role: "user", content: "Remember that I prefer concise status updates." },
+        { role: "user", content: "I'm allergic to peanuts." },
+        { role: "assistant", content: "Noted: you prefer concise status updates." },
+      ],
+      metadata: { topic: "preferences" },
+    });
+
+    expect(extracted).toHaveLength(3);
+    expect(extracted.map((item) => item.content)).toContain("I prefer concise status updates");
+    expect(extracted.map((item) => item.content)).toContain("I'm allergic to peanuts");
+    expect(extracted[0]?.metadata).toMatchObject({
+      source: "zep",
+      extracted_from: "session-transcript",
+      extraction_method: "heuristic-v1",
+      topic: "preferences",
+    });
+  });
+
+  it("supports transcript extraction through bound session client", async () => {
+    const store = new InMemoryMemoryStore();
+    await store.init();
+
+    const client = new ZepMemoryClient(
+      store as unknown as MemoryStore,
+      new DefaultZepContextResolver({ orgId: "org-1", projectId: "project-1" }),
+    );
+
+    const session = client.session("session-bound");
+    const extracted = await session.extract_memory(
+      "Remember that my timezone is America/Chicago. Remember that my timezone is America/Chicago.",
+      { limit: 5 },
+    );
+
+    expect(extracted).toHaveLength(1);
+    expect(extracted[0]?.content).toContain("my timezone is America/Chicago");
+  });
+
   it("isolates memories by session id", async () => {
     const store = new InMemoryMemoryStore();
     await store.init();

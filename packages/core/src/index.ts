@@ -358,20 +358,6 @@ export {
   validateIncomingContextPacket,
   validatePacketSecurity,
 } from "./handoff-schema.js";
-export type {
-  HandoffSseEvent,
-  HandoffSseEventName,
-  HandoffSseSession,
-  HandoffSseSessionOptions,
-} from "./handoff-sse.js";
-export {
-  createHandoffSseSession,
-  DEFAULT_HANDOFF_SSE_HEARTBEAT_MS,
-  DEFAULT_HANDOFF_SSE_REPLAY_LIMIT,
-  SSE_HEADERS,
-  serializeSseComment,
-  serializeSseEvent,
-} from "./handoff-sse.js";
 export type { HierarchyLoadResult, HierarchyOptions } from "./hierarchy.js";
 export { findRootInstruction, loadHierarchy } from "./hierarchy.js";
 export type { ImportFormat, ImportResult } from "./import.js";

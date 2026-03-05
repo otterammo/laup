@@ -272,7 +272,7 @@ export class ZepMemoryClient implements ZepCompatibleMemoryClient {
   }
 
   private toZepMemory(record: MemoryRecord, score?: number): ZepMemory {
-    const roleValue = record.metadata?.role;
+    const roleValue = record.metadata?.["role"];
 
     return {
       uuid: record.id,

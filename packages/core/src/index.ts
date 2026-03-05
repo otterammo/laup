@@ -388,6 +388,21 @@ export {
   renderMarketplacePage,
 } from "./marketplace.js";
 export type {
+  McpCapabilityDashboardServer,
+  McpCapabilityDashboardSnapshot,
+  McpCapabilityDiscoveryClient,
+  McpCapabilityDiscoveryConfig,
+  McpCapabilityManifest,
+  McpCapabilityQueryMatch,
+  McpCapabilityQueryResult,
+} from "./mcp-capability-discovery.js";
+export {
+  McpCapabilityDashboardServerSchema,
+  McpCapabilityDashboardSnapshotSchema,
+  McpCapabilityDiscoveryService,
+  McpCapabilityManifestSchema,
+} from "./mcp-capability-discovery.js";
+export type {
   McpPropagationOptions,
   McpPropagationReport,
   McpPropagationTarget,

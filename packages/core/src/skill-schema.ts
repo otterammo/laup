@@ -295,6 +295,9 @@ export const SkillSchema = z.object({
   /** Composed skill steps (SKILL-008) */
   steps: z.array(SkillStepSchema).optional(),
 
+  /** Execution mode for multi-step skills (SKILL-014) */
+  mode: z.enum(["single", "pipeline"]).optional(),
+
   /** Access control (SKILL-010) */
   access: SkillAccessControlSchema.optional(),
 
@@ -746,6 +749,63 @@ export interface SkillTestResult {
 }
 
 /**
+ * Runtime context available while executing a pipeline.
+ */
+export interface PipelineExecutionContext {
+  /** Original invocation params */
+  input: Record<string, unknown>;
+  /** Previous step output (if any) */
+  previousOutput?: unknown;
+  /** Named step outputs from `as` labels */
+  outputs: Record<string, unknown>;
+}
+
+/**
+ * Error returned when a pipeline step fails.
+ */
+export interface PipelineExecutionError {
+  stepIndex: number;
+  stepSkill: string;
+  message: string;
+}
+
+/**
+ * Result of a single pipeline step.
+ */
+export interface PipelineStepResult {
+  stepIndex: number;
+  skill: string;
+  input: Record<string, unknown>;
+  output: unknown;
+}
+
+/**
+ * Result of a pipeline execution.
+ */
+export interface PipelineExecutionResult {
+  success: boolean;
+  finalOutput?: unknown;
+  steps: PipelineStepResult[];
+  error?: PipelineExecutionError;
+}
+
+/**
+ * Pipeline execution options.
+ */
+export interface PipelineExecutionOptions {
+  /** Resolve a step skill definition */
+  resolveSkill: (name: string) => Skill | undefined;
+  /** Execute a single skill step */
+  executeStep: (
+    skill: Skill,
+    params: Record<string, unknown>,
+    context: PipelineExecutionContext,
+  ) => Promise<unknown> | unknown;
+  /** Optional condition evaluator for step.when */
+  evaluateWhen?: (expression: string, context: PipelineExecutionContext) => boolean;
+}
+
+/**
  * Run a single assertion against output.
  */
 export function runAssertion(assertion: SkillTestAssertion, output: string): AssertionResult {
@@ -833,4 +893,111 @@ export function hasTests(skill: Skill): boolean {
  */
 export function getRunnableTests(skill: Skill): SkillTestCase[] {
   return (skill.tests ?? []).filter((t) => !t.skip);
+}
+
+/**
+ * Find a skill by slash command trigger.
+ */
+export function findSkillByCommand(skills: Skill[], command: string): Skill | undefined {
+  return skills.find((skill) => skill.trigger.command.toLowerCase() === command.toLowerCase());
+}
+
+/**
+ * Execute a composed skill in pipeline mode.
+ *
+ * - Steps execute in declared order.
+ * - Previous step output is exposed to subsequent steps.
+ * - Execution halts on first step error with a structured error result.
+ */
+export async function executeSkillPipeline(
+  skill: Skill,
+  params: Record<string, unknown>,
+  options: PipelineExecutionOptions,
+): Promise<PipelineExecutionResult> {
+  if (!skill.steps || skill.steps.length === 0) {
+    return {
+      success: true,
+      finalOutput: undefined,
+      steps: [],
+    };
+  }
+
+  const results: PipelineStepResult[] = [];
+  const namedOutputs: Record<string, unknown> = {};
+  let previousOutput: unknown;
+
+  for (const [stepIndex, step] of skill.steps.entries()) {
+    const stepSkill = options.resolveSkill(step.skill);
+    if (!stepSkill) {
+      return {
+        success: false,
+        steps: results,
+        error: {
+          stepIndex,
+          stepSkill: step.skill,
+          message: `Step skill not found: ${step.skill}`,
+        },
+      };
+    }
+
+    const context: PipelineExecutionContext = {
+      input: params,
+      previousOutput,
+      outputs: namedOutputs,
+    };
+
+    if (step.when) {
+      const shouldRun = options.evaluateWhen
+        ? options.evaluateWhen(step.when, context)
+        : Boolean((namedOutputs as Record<string, unknown>)[step.when]);
+
+      if (!shouldRun) {
+        continue;
+      }
+    }
+
+    const inheritedContext: Record<string, unknown> = {
+      ...params,
+      ...namedOutputs,
+      previousOutput,
+      output: previousOutput,
+    };
+
+    const stepInput = resolveStepParams(step, inheritedContext);
+    if (!step.params && !step.args && previousOutput !== undefined) {
+      stepInput["input"] = previousOutput;
+    }
+
+    try {
+      const output = await options.executeStep(stepSkill, stepInput, context);
+
+      if (step.as) {
+        namedOutputs[step.as] = output;
+      }
+
+      previousOutput = output;
+      results.push({
+        stepIndex,
+        skill: step.skill,
+        input: stepInput,
+        output,
+      });
+    } catch (error) {
+      return {
+        success: false,
+        steps: results,
+        error: {
+          stepIndex,
+          stepSkill: step.skill,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      };
+    }
+  }
+
+  return {
+    success: true,
+    finalOutput: previousOutput,
+    steps: results,
+  };
 }

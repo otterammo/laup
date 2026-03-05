@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { InMemoryInfrastructureCostStorage } from "../cloud-billing.js";
 import { CostDashboardService } from "../cost-dashboard.js";
 import type { UsageEvent } from "../cost-schema.js";
 import { InMemoryPricingProvider } from "../pricing-provider.js";
@@ -59,6 +60,11 @@ describe("CostDashboardService", () => {
 
     expect(snapshot.realtime.windowId).toBe("5m");
     expect(snapshot.realtime.summary.totalCost).toBeCloseTo(0.004, 8);
+    expect(snapshot.realtime.lineItems).toEqual({
+      application: 0.004,
+      infrastructure: 0,
+      total: 0.004,
+    });
     expect(snapshot.windows[1]?.summary.totalCost).toBeCloseTo(0.009, 8);
 
     expect(snapshot.historical.bucket).toBe("hour");
@@ -131,6 +137,60 @@ describe("CostDashboardService", () => {
       fromModel: "gpt-4o",
       toModel: "gpt-4o-mini",
       taskType: "analysis",
+    });
+  });
+
+  it("includes infrastructure billing as a separate line item", async () => {
+    const usageStorage = new InMemoryUsageStorage();
+    await usageStorage.init();
+
+    const pricingProvider = new InMemoryPricingProvider({
+      initialPricing: [
+        {
+          provider: "openai",
+          model: "gpt-4o-mini",
+          inputCostPerMillion: 1,
+          outputCostPerMillion: 2,
+          effectiveDate: "2026-01-01",
+          currency: "USD",
+        },
+      ],
+    });
+
+    const infrastructureCostStorage = new InMemoryInfrastructureCostStorage();
+    await infrastructureCostStorage.upsert([
+      {
+        id: "infra-1",
+        provider: "aws",
+        componentId: "gateway",
+        service: "ec2",
+        startTime: "2026-03-03T17:30:00.000Z",
+        endTime: "2026-03-03T17:45:00.000Z",
+        amount: 2.5,
+        currency: "USD",
+        tags: { "laup:component": "gateway" },
+      },
+    ]);
+
+    await store(usageStorage, "2026-03-03T17:40:00.000Z", {
+      inputTokens: 1000,
+      outputTokens: 500,
+    });
+
+    const service = new CostDashboardService({
+      usageStorage,
+      pricingProvider,
+      infrastructureCostStorage,
+      windows: [{ id: "1h", durationMs: 60 * 60_000 }],
+      now: () => new Date(),
+    });
+
+    const snapshot = await service.snapshot();
+    expect(snapshot.realtime.summary.totalCost).toBeCloseTo(0.002, 8);
+    expect(snapshot.realtime.lineItems).toEqual({
+      application: 0.002,
+      infrastructure: 2.5,
+      total: 2.502,
     });
   });
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { InfrastructureCostStorage } from "./cloud-billing.js";
 import {
   type AutoModelRoutingPolicy,
   AutoModelRoutingPolicySchema,
@@ -42,10 +43,17 @@ export type CostDashboardRoutingRecommendationConfig = z.infer<
 export interface CostDashboardConfig {
   usageStorage: UsageStorage;
   pricingProvider: PricingProvider;
+  infrastructureCostStorage?: InfrastructureCostStorage;
   windows?: CostDashboardWindow[];
   historical?: Partial<CostDashboardHistoricalConfig>;
   routingRecommendations?: Partial<CostDashboardRoutingRecommendationConfig>;
   now?: () => Date;
+}
+
+export interface CostDashboardLineItems {
+  application: number;
+  infrastructure: number;
+  total: number;
 }
 
 export interface CostDashboardHistoryPoint {
@@ -61,6 +69,7 @@ export interface CostDashboardSnapshot {
     startTime: string;
     endTime: string;
     summary: CostSummary;
+    lineItems: CostDashboardLineItems;
   };
   windows: Array<{
     id: string;
@@ -68,10 +77,11 @@ export interface CostDashboardSnapshot {
     startTime: string;
     endTime: string;
     summary: CostSummary;
+    lineItems: CostDashboardLineItems;
   }>;
   historical: {
     bucket: "hour" | "day";
-    points: CostDashboardHistoryPoint[];
+    points: Array<CostDashboardHistoryPoint & { lineItems: CostDashboardLineItems }>;
   };
   routingRecommendations: {
     enabled: boolean;
@@ -127,16 +137,25 @@ export class CostDashboardService {
     const earliestStart = new Date(endTime.getTime() - maxDurationMs);
 
     const events = await queryAllEvents(this.config.usageStorage, earliestStart, endTime);
+    const infrastructureCosts = this.config.infrastructureCostStorage
+      ? await this.config.infrastructureCostStorage.query({ startTime: earliestStart, endTime })
+      : [];
 
     const windows = this.windows.map((window) => {
       const startTime = new Date(endTime.getTime() - window.durationMs);
       const summary = summarizeRange(events, pricingMap, startTime, endTime);
+      const infrastructure = summarizeInfrastructureRange(infrastructureCosts, startTime, endTime);
       return {
         id: window.id,
         durationMs: window.durationMs,
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
         summary,
+        lineItems: {
+          application: summary.totalCost,
+          infrastructure,
+          total: summary.totalCost + infrastructure,
+        },
       };
     });
 
@@ -145,7 +164,13 @@ export class CostDashboardService {
       throw new Error("Cost dashboard requires at least one window");
     }
 
-    const historicalPoints = buildHistory(events, pricingMap, endTime, this.historical);
+    const historicalPoints = buildHistory(
+      events,
+      pricingMap,
+      infrastructureCosts,
+      endTime,
+      this.historical,
+    );
 
     const recommendations = this.routingRecommendations.enabled
       ? generateModelRoutingRecommendations(events, pricingMap, {
@@ -166,6 +191,7 @@ export class CostDashboardService {
         startTime: realtimeWindow.startTime,
         endTime: realtimeWindow.endTime,
         summary: realtimeWindow.summary,
+        lineItems: realtimeWindow.lineItems,
       },
       windows,
       historical: {
@@ -222,23 +248,55 @@ function summarizeRange(
   return aggregateUsage(filtered, pricingMap, startTime.toISOString(), endTime.toISOString());
 }
 
+function summarizeInfrastructureRange(
+  records: Array<{ amount: number; startTime: string; endTime: string }>,
+  startTime: Date,
+  endTime: Date,
+): number {
+  const start = startTime.getTime();
+  const end = endTime.getTime();
+
+  return records.reduce((total, record) => {
+    const recordStart = Date.parse(record.startTime);
+    const recordEnd = Date.parse(record.endTime);
+    if (recordEnd > start && recordStart < end) {
+      return total + record.amount;
+    }
+
+    return total;
+  }, 0);
+}
+
 function buildHistory(
   events: Awaited<ReturnType<UsageStorage["query"]>>["data"],
   pricingMap: Parameters<typeof aggregateUsage>[1],
+  infrastructureCosts: Array<{ amount: number; startTime: string; endTime: string }>,
   endTime: Date,
   historical: CostDashboardHistoricalConfig,
-): CostDashboardHistoryPoint[] {
+): Array<CostDashboardHistoryPoint & { lineItems: CostDashboardLineItems }> {
   const durationMs = bucketDurationMs(historical.bucket);
-  const points: CostDashboardHistoryPoint[] = [];
+  const points: Array<CostDashboardHistoryPoint & { lineItems: CostDashboardLineItems }> = [];
 
   for (let index = historical.points - 1; index >= 0; index -= 1) {
     const bucketEnd = new Date(endTime.getTime() - index * durationMs);
     const bucketStart = new Date(bucketEnd.getTime() - durationMs);
 
+    const summary = summarizeRange(events, pricingMap, bucketStart, bucketEnd);
+    const infrastructure = summarizeInfrastructureRange(
+      infrastructureCosts,
+      bucketStart,
+      bucketEnd,
+    );
+
     points.push({
       bucketStart: bucketStart.toISOString(),
       bucketEnd: bucketEnd.toISOString(),
-      summary: summarizeRange(events, pricingMap, bucketStart, bucketEnd),
+      summary,
+      lineItems: {
+        application: summary.totalCost,
+        infrastructure,
+        total: summary.totalCost + infrastructure,
+      },
     });
   }
 

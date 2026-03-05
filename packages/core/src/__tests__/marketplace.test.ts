@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   createMarketplaceApiHandler,
+  InMemoryMarketplaceSkillAnalytics,
   InMemorySkillMarketplace,
   type MarketplaceSkill,
+  renderMarketplaceAuthorAnalyticsPage,
   renderMarketplacePage,
 } from "../marketplace.js";
 
@@ -83,6 +85,81 @@ describe("marketplace", () => {
     });
   });
 
+  describe("author analytics", () => {
+    it("aggregates installs, invocation frequency, and parameter usage", async () => {
+      const marketplace = makeMarketplace();
+      const analytics = new InMemoryMarketplaceSkillAnalytics(
+        marketplace,
+        () => new Date("2026-03-01T12:00:00.000Z"),
+      );
+
+      await analytics.recordInstall({
+        skillId: "acme/weather",
+        version: "1.0.0",
+        timestamp: "2026-02-01T01:00:00.000Z",
+      });
+      await analytics.recordInstall({
+        skillId: "acme/weather",
+        version: "1.2.0",
+        timestamp: "2026-02-02T01:00:00.000Z",
+      });
+      await analytics.recordInstall({
+        skillId: "acme/calendar",
+        version: "2.1.0",
+        timestamp: "2026-02-02T05:00:00.000Z",
+      });
+      await analytics.recordInstall({
+        skillId: "labs/release-notes",
+        version: "0.9.1",
+        timestamp: "2026-02-03T05:00:00.000Z",
+      });
+
+      await analytics.recordInvocation({
+        skillId: "acme/weather",
+        invocationCount: 3,
+        parameters: { location: "Austin", units: "metric" },
+        defaultParameters: ["units"],
+        timestamp: "2026-02-02T01:00:00.000Z",
+      });
+      await analytics.recordInvocation({
+        skillId: "acme/calendar",
+        invocationCount: 2,
+        parameters: { timezone: "America/Chicago" },
+        timestamp: "2026-02-10T01:00:00.000Z",
+      });
+      await analytics.recordInvocation({
+        skillId: "labs/release-notes",
+        invocationCount: 10,
+        parameters: { format: "markdown" },
+        timestamp: "2026-02-10T01:00:00.000Z",
+      });
+
+      const report = await analytics.getAuthorAnalytics("acme", { interval: "weekly" });
+
+      expect(report.installs.byVersion).toEqual([
+        { version: "1.0.0", count: 1 },
+        { version: "1.2.0", count: 1 },
+        { version: "2.1.0", count: 1 },
+      ]);
+      expect(report.installs.overTime).toEqual([
+        { periodStart: "2026-01-26T00:00:00.000Z", count: 1 },
+        { periodStart: "2026-02-02T00:00:00.000Z", count: 2 },
+      ]);
+
+      expect(report.invocations.total).toBe(5);
+      expect(report.invocations.frequency).toEqual([
+        { periodStart: "2026-02-02T00:00:00.000Z", count: 3 },
+        { periodStart: "2026-02-09T00:00:00.000Z", count: 2 },
+      ]);
+
+      expect(report.parameterUsage).toEqual([
+        { parameter: "location", usedCount: 3, defaultUsedCount: 0, overriddenCount: 3 },
+        { parameter: "units", usedCount: 3, defaultUsedCount: 3, overriddenCount: 0 },
+        { parameter: "timezone", usedCount: 2, defaultUsedCount: 0, overriddenCount: 2 },
+      ]);
+    });
+  });
+
   describe("API handler", () => {
     it("returns skill listing from GET /skills", async () => {
       const marketplace = makeMarketplace();
@@ -114,6 +191,51 @@ describe("marketplace", () => {
       expect(payload.id).toBe("acme/weather");
     });
 
+    it("returns author analytics via API and dashboard", async () => {
+      const marketplace = makeMarketplace();
+      const analytics = new InMemoryMarketplaceSkillAnalytics(
+        marketplace,
+        () => new Date("2026-03-01T12:00:00.000Z"),
+      );
+      await analytics.recordInstall({
+        skillId: "acme/weather",
+        version: "1.2.0",
+        timestamp: "2026-02-02T01:00:00.000Z",
+      });
+      await analytics.recordInvocation({
+        skillId: "acme/weather",
+        invocationCount: 4,
+        parameters: { location: "Austin" },
+        timestamp: "2026-02-02T01:00:00.000Z",
+      });
+
+      const handler = createMarketplaceApiHandler({ marketplace, analytics });
+
+      const apiResponse = await handler({
+        method: "GET",
+        path: "/api/marketplace/authors/acme/analytics",
+        query: { interval: "daily" },
+      });
+
+      expect(apiResponse.status).toBe(200);
+      const payload = JSON.parse(apiResponse.body) as {
+        author: string;
+        invocations: { total: number };
+      };
+      expect(payload.author).toBe("acme");
+      expect(payload.invocations.total).toBe(4);
+
+      const dashboardResponse = await handler({
+        method: "GET",
+        path: "/api/marketplace/authors/acme/analytics/dashboard",
+      });
+
+      expect(dashboardResponse.status).toBe(200);
+      expect(dashboardResponse.headers["content-type"]).toContain("text/html");
+      expect(dashboardResponse.body).toContain("Skill Analytics · acme");
+      expect(dashboardResponse.body).toContain("Total invocations: 4");
+    });
+
     it("rejects unsupported methods", async () => {
       const marketplace = makeMarketplace();
       const handler = createMarketplaceApiHandler({ marketplace });
@@ -130,6 +252,27 @@ describe("marketplace", () => {
       expect(html).toContain("<h1>Skill Marketplace</h1>");
       expect(html).toContain("Weather Assistant");
       expect(html).toContain("Showing 2 of 3 skills.");
+    });
+
+    it("renders analytics dashboard page", async () => {
+      const marketplace = makeMarketplace();
+      const analytics = new InMemoryMarketplaceSkillAnalytics(
+        marketplace,
+        () => new Date("2026-03-01T12:00:00.000Z"),
+      );
+      await analytics.recordInstall({
+        skillId: "acme/weather",
+        version: "1.2.0",
+        timestamp: "2026-02-02T01:00:00.000Z",
+      });
+
+      const html = await renderMarketplaceAuthorAnalyticsPage({ marketplace, analytics }, "acme", {
+        interval: "monthly",
+      });
+
+      expect(html).toContain("Skill Analytics · acme");
+      expect(html).toContain("Installation counts");
+      expect(html).toContain("Per version");
     });
   });
 });

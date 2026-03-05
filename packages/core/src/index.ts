@@ -345,6 +345,34 @@ export {
   MemoryJobQueue,
 } from "./job-queue.js";
 export type {
+  AuthorSkillAnalytics,
+  AuthorSkillAnalyticsQuery,
+  MarketplaceApiOptions,
+  MarketplaceApiRequest,
+  MarketplaceApiResponse,
+  MarketplacePage,
+  MarketplaceQuery,
+  MarketplaceSkill,
+  MarketplaceSkillAnalytics,
+  MarketplaceSortBy,
+  MarketplaceSortOrder,
+  SkillAnalyticsInterval,
+  SkillInstallAnalyticsEvent,
+  SkillInvocationAnalyticsEvent,
+  SkillMarketplace,
+  SkillParameterUsagePattern,
+  SkillVersionInstallationCount,
+} from "./marketplace.js";
+export {
+  createMarketplaceApiHandler,
+  InMemoryMarketplaceSkillAnalytics,
+  InMemorySkillMarketplace,
+  renderMarketplaceAuthorAnalyticsHtml,
+  renderMarketplaceAuthorAnalyticsPage,
+  renderMarketplaceHtml,
+  renderMarketplacePage,
+} from "./marketplace.js";
+export type {
   McpPropagationOptions,
   McpPropagationReport,
   McpPropagationTarget,

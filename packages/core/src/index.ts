@@ -57,6 +57,9 @@ export type {
   ClaudeCodeDeserializerOutput,
   ClaudeCodeSerializerInput,
   ClaudeCodeTaskContext,
+  CompressedContextPacketEnvelope,
+  ContextPacketCompressionAlgorithm,
+  ContextPacketTransport,
   CursorDeserializerOutput,
   CursorEditorSelection,
   CursorNotepad,
@@ -64,10 +67,15 @@ export type {
   DeserializeContextSecurityOptions,
 } from "./context-packet-serializers.js";
 export {
+  compressContextPacketForTransport,
+  DEFAULT_PACKET_COMPRESSION_THRESHOLD_BYTES,
+  decompressContextPacketForValidation,
   deserializeClaudeCodeContext,
   deserializeCursorContext,
   serializeClaudeCodeContext,
+  serializeClaudeCodeContextForTransport,
   serializeCursorContext,
+  serializeCursorContextForTransport,
 } from "./context-packet-serializers.js";
 export type {
   FallbackPricing,

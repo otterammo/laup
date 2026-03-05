@@ -6,6 +6,7 @@ import {
   createPartialPacket,
   estimateCompressedSize,
   HandoffHistoryEntrySchema,
+  IncomingContextPacketSchema,
   shouldCompressPacket,
   validateIncomingContextPacket,
   validatePacketSecurity,
@@ -159,6 +160,25 @@ describe("handoff-schema", () => {
       expect(logs).toHaveLength(1);
       expect(logs[0]?.packetId).toBe("packet-1");
     });
+
+    it("accepts partial packets with omitted optional context fields", () => {
+      const partial = {
+        packetId: "packet-2",
+        schemaVersion: "1.0.0",
+        sendingTool: "codex",
+        receivingTool: "claude-code",
+        timestamp: "2026-01-15T10:00:00Z",
+        fieldSubset: [{ path: "task.title" }],
+        task: { title: "Only task title" },
+      };
+
+      const result = validateIncomingContextPacket(partial, {
+        registeredTools: ["codex", "claude-code"],
+      });
+
+      expect(result.valid).toBe(true);
+      expect(IncomingContextPacketSchema.safeParse(result.packet).success).toBe(true);
+    });
   });
 
   describe("shouldCompressPacket (HAND-010)", () => {
@@ -188,14 +208,14 @@ describe("handoff-schema", () => {
   });
 
   describe("createPartialPacket (HAND-009)", () => {
-    it("extracts specified fields", () => {
-      const fields: ContextField[] = [
-        { path: "task.title", required: false },
-        { path: "workingContext.currentFile", required: false },
-      ];
+    it("extracts only specified fields", () => {
+      const fields: ContextField[] = [{ path: "task.title", required: false }];
       const partial = createPartialPacket(samplePacket, fields);
       expect(partial.packetId).toBe(samplePacket.packetId);
-      expect(partial).toHaveProperty("task");
+      expect(partial.task).toEqual({ title: "Review auth middleware" });
+      expect(partial.workingContext).toBeUndefined();
+      expect(partial.constraints).toBeUndefined();
+      expect(partial.fieldSubset).toEqual(fields);
     });
 
     it("throws for missing required field", () => {

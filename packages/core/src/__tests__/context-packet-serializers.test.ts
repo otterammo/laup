@@ -290,6 +290,33 @@ describe("context-packet-serializers (HAND-002)", () => {
     expect(rejections[0]?.reasons.join(" ")).toMatch(/Untrusted packet source|Prompt injection/);
   });
 
+  it("deserializes partial packet when optional fields are omitted", () => {
+    const packet = {
+      packetId: "packet-claude-partial",
+      schemaVersion: "1.0.0",
+      sendingTool: "claude-code",
+      receivingTool: "cursor",
+      timestamp: "2026-03-04T23:10:00.000Z",
+      fieldSubset: [{ path: "workingContext.claudeCode" }],
+      workingContext: {
+        claudeCode: {
+          taskContext: {
+            taskId: "task-99",
+            objective: "Partial handoff",
+            status: "running",
+          },
+          activeFiles: ["README.md"],
+          memoryMd: "# Memory",
+        },
+      },
+    };
+
+    const restored = deserializeClaudeCodeContext(packet, securityOptions);
+
+    expect(restored.native.taskContext.taskId).toBe("task-99");
+    expect(restored.memoryWrite.content).toBe("# Memory");
+  });
+
   it("rejects untrusted packets and logs reason", () => {
     const packet = serializeClaudeCodeContext({
       id: "packet-claude-bad",

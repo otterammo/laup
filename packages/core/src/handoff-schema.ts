@@ -56,7 +56,7 @@ export type ContextField = z.infer<typeof ContextFieldSchema>;
  * Standard context packet format for handoff (HAND-001).
  * Tool-agnostic by design: tool fields are open strings and context fields are generic records.
  */
-export const ContextPacketSchema = z.object({
+const ContextPacketBaseSchema = z.object({
   /** Unique packet ID */
   packetId: z.string().min(1),
 
@@ -68,24 +68,6 @@ export const ContextPacketSchema = z.object({
 
   /** Receiving tool identifier */
   receivingTool: z.string().min(1),
-
-  /** Current task payload */
-  task: z.record(z.string(), z.unknown()),
-
-  /** Working context payload */
-  workingContext: z.record(z.string(), z.unknown()),
-
-  /** Memory references */
-  memoryRefs: z.array(z.string()),
-
-  /** Conversation summary */
-  conversationSummary: z.string(),
-
-  /** Constraints to apply during handoff */
-  constraints: z.array(z.string()),
-
-  /** Permission policy payload */
-  permissionPolicy: z.record(z.string(), z.unknown()),
 
   /** Creation timestamp */
   timestamp: z.string().datetime(),
@@ -103,7 +85,40 @@ export const ContextPacketSchema = z.object({
   originalSizeBytes: z.number().optional(),
 });
 
+export const ContextPacketSchema = ContextPacketBaseSchema.extend({
+  /** Current task payload */
+  task: z.record(z.string(), z.unknown()),
+
+  /** Working context payload */
+  workingContext: z.record(z.string(), z.unknown()),
+
+  /** Memory references */
+  memoryRefs: z.array(z.string()),
+
+  /** Conversation summary */
+  conversationSummary: z.string(),
+
+  /** Constraints to apply during handoff */
+  constraints: z.array(z.string()),
+
+  /** Permission policy payload */
+  permissionPolicy: z.record(z.string(), z.unknown()),
+});
+
+/**
+ * Incoming handoff packet schema that supports partial payloads (HAND-009).
+ */
+export const IncomingContextPacketSchema = ContextPacketBaseSchema.extend({
+  task: z.record(z.string(), z.unknown()).optional(),
+  workingContext: z.record(z.string(), z.unknown()).optional(),
+  memoryRefs: z.array(z.string()).optional(),
+  conversationSummary: z.string().optional(),
+  constraints: z.array(z.string()).optional(),
+  permissionPolicy: z.record(z.string(), z.unknown()).optional(),
+});
+
 export type ContextPacket = z.infer<typeof ContextPacketSchema>;
+export type IncomingContextPacket = z.infer<typeof IncomingContextPacketSchema>;
 
 /**
  * Handoff acknowledgment.
@@ -193,6 +208,9 @@ export const HandoffHistoryEntrySchema = z.object({
   /** Packet size in bytes */
   packetSizeBytes: z.number().optional(),
 
+  /** Included field paths when packet is a partial handoff (HAND-009) */
+  includedFields: z.array(z.string()).optional(),
+
   /** Error details if failed */
   error: z.string().optional(),
 });
@@ -263,7 +281,7 @@ export interface IncomingPacketPolicy {
 
 export interface IncomingPacketValidationResult {
   valid: boolean;
-  packet?: ContextPacket;
+  packet?: IncomingContextPacket;
   reasons: string[];
 }
 
@@ -329,7 +347,7 @@ export function validateIncomingContextPacket(
   logRejection?: (entry: { packetId?: string; sendingTool?: string; reasons: string[] }) => void,
 ): IncomingPacketValidationResult {
   const reasons: string[] = [];
-  const parsed = ContextPacketSchema.safeParse(candidate);
+  const parsed = IncomingContextPacketSchema.safeParse(candidate);
 
   if (!parsed.success) {
     reasons.push("Schema validation failed");
@@ -345,7 +363,7 @@ export function validateIncomingContextPacket(
 
   if (policy.requiredConstraints) {
     for (const required of policy.requiredConstraints) {
-      if (!packet.constraints.includes(required)) {
+      if (!(packet.constraints ?? []).includes(required)) {
         reasons.push(`Missing required constraint: ${required}`);
       }
     }
@@ -353,14 +371,15 @@ export function validateIncomingContextPacket(
 
   if (policy.deniedConstraints) {
     for (const denied of policy.deniedConstraints) {
-      if (packet.constraints.includes(denied)) {
+      if ((packet.constraints ?? []).includes(denied)) {
         reasons.push(`Denied constraint present: ${denied}`);
       }
     }
   }
 
-  const permissionAllow = readStringList(packet.permissionPolicy, "allow");
-  const permissionDeny = readStringList(packet.permissionPolicy, "deny");
+  const permissionPolicy = packet.permissionPolicy ?? {};
+  const permissionAllow = readStringList(permissionPolicy, "allow");
+  const permissionDeny = readStringList(permissionPolicy, "deny");
 
   if (policy.allowedPermissions) {
     for (const requestedPermission of permissionAllow) {
@@ -439,25 +458,27 @@ export function shouldCompressPacket(packet: ContextPacket, thresholdBytes = 102
 export function createPartialPacket(
   packet: ContextPacket,
   fields: ContextField[],
-): Partial<ContextPacket> {
-  const partial: Partial<ContextPacket> = {
+): IncomingContextPacket {
+  const partial: IncomingContextPacket = {
     packetId: packet.packetId,
     schemaVersion: packet.schemaVersion,
     sendingTool: packet.sendingTool,
     receivingTool: packet.receivingTool,
-    task: packet.task,
-    workingContext: packet.workingContext,
-    memoryRefs: packet.memoryRefs,
-    conversationSummary: packet.conversationSummary,
-    constraints: packet.constraints,
-    permissionPolicy: packet.permissionPolicy,
     timestamp: packet.timestamp,
+    compressed: packet.compressed,
+    ...(packet.compressionAlgorithm ? { compressionAlgorithm: packet.compressionAlgorithm } : {}),
+    ...(packet.originalSizeBytes ? { originalSizeBytes: packet.originalSizeBytes } : {}),
+    fieldSubset: fields,
   };
 
   for (const field of fields) {
     const value = getNestedValue(packet, field.path);
     if (value !== undefined) {
-      setNestedValue(partial, field.path, field.redact ? "[REDACTED]" : value);
+      setNestedValue(
+        partial as Record<string, unknown>,
+        field.path,
+        field.redact ? "[REDACTED]" : value,
+      );
     } else if (field.required) {
       throw new Error(`Required field "${field.path}" not found in packet`);
     }

@@ -4,11 +4,15 @@ import {
   ContextPacketSchema,
   type HandoffMode,
   type HandoffRouting,
+  IncomingContextPacketSchema,
   type IncomingPacketPolicy,
   validateIncomingContextPacket,
 } from "./handoff-schema.js";
 
 type PacketPriority = "low" | "normal" | "high" | "urgent";
+
+const CLAUDE_CODE_CONTEXT_KEY = "claudeCode";
+const CURSOR_CONTEXT_KEY = "cursor";
 
 interface BaseSerializerInput {
   id: string;
@@ -235,8 +239,8 @@ export function deserializeClaudeCodeContext(
     throw new Error(`Context packet rejected: ${validated.reasons.join("; ")}`);
   }
 
-  const parsed = ContextPacketSchema.parse(validated.packet);
-  const claudeCode = parsed.workingContext["claudeCode"] as
+  const parsed = IncomingContextPacketSchema.parse(validated.packet);
+  const claudeCode = parsed.workingContext?.[CLAUDE_CODE_CONTEXT_KEY] as
     | ClaudeCodeSerializerInput["native"]
     | undefined;
 
@@ -249,7 +253,7 @@ export function deserializeClaudeCodeContext(
     memoryWrite: {
       filePath: "MEMORY.md",
       mode: "prepend",
-      content: prependSummaryToMemory(parsed.conversationSummary, claudeCode.memoryMd),
+      content: prependSummaryToMemory(parsed.conversationSummary ?? "", claudeCode.memoryMd),
     },
   };
 }
@@ -268,8 +272,10 @@ export function deserializeCursorContext(
     throw new Error(`Context packet rejected: ${validated.reasons.join("; ")}`);
   }
 
-  const parsed = ContextPacketSchema.parse(validated.packet);
-  const cursor = parsed.workingContext["cursor"] as CursorSerializerInput["native"] | undefined;
+  const parsed = IncomingContextPacketSchema.parse(validated.packet);
+  const cursor = parsed.workingContext?.[CURSOR_CONTEXT_KEY] as
+    | CursorSerializerInput["native"]
+    | undefined;
 
   if (!cursor) {
     throw new Error("Context packet is missing workingContext.cursor payload");

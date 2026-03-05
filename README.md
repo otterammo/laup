@@ -198,10 +198,14 @@ See [docs/memory-semantic-retrieval.md](docs/memory-semantic-retrieval.md) for M
 semantic retrieval behavior and API usage.
 See [docs/memory-scopes.md](docs/memory-scopes.md) for MEM-001 and MEM-012 memory scope and
 audit trail behavior.
+See [docs/external-knowledge-base.md](docs/external-knowledge-base.md) for MEM-015
+read-only external knowledge base integration (Confluence/Notion connectors + sync service).
 See [docs/zep-compatibility.md](docs/zep-compatibility.md) for MEM-006 and MEM-007
 Zep-compatible session memory integration patterns, including transcript extraction.
 See [docs/context-packet-format.md](docs/context-packet-format.md) for HAND-001
 standard context packet format requirements.
+See [docs/handoff-sse.md](docs/handoff-sse.md) for HAND-012 real-time handoff
+streaming integration via Server-Sent Events (SSE).
 
 ## Roadmap
 

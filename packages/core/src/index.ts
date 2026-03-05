@@ -263,6 +263,24 @@ export {
   Migrator,
 } from "./db-migrations.js";
 export type {
+  ConfluenceConnectorOptions,
+  ExternalKnowledgeBaseConnector,
+  ExternalKnowledgeBaseProvider,
+  ExternalKnowledgeDocument,
+  ExternalKnowledgeSyncOptions,
+  ExternalKnowledgeSyncResult,
+  NotionConnectorOptions,
+} from "./external-knowledge-base.js";
+export {
+  annotateExternalKnowledgeResults,
+  ConfluenceKnowledgeBaseConnector,
+  ExternalKnowledgeSyncService,
+  isExternalKnowledgeRecord,
+  listMemoryIncludingExternalSources,
+  NotionKnowledgeBaseConnector,
+  searchMemoryIncludingExternalSources,
+} from "./external-knowledge-base.js";
+export type {
   HandoffHistoryQuery,
   HandoffHistoryRecord,
   HandoffHistoryStatus,

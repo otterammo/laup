@@ -69,6 +69,26 @@ export {
   exportChargebackReport,
 } from "./chargeback-report.js";
 export type {
+  CloudBillingConnector,
+  CloudBillingProvider,
+  CloudBillingSyncConfig,
+  CloudBillingSyncResult,
+  CloudBillingSyncSchedule,
+  InfrastructureCostRecord,
+  InfrastructureCostStorage,
+} from "./cloud-billing.js";
+export {
+  AwsCostExplorerConnector,
+  AzureCostManagementConnector,
+  CloudBillingProviderSchema,
+  CloudBillingSyncScheduleSchema,
+  CloudBillingSyncService,
+  createCloudBillingSyncService,
+  GcpBillingConnector,
+  InfrastructureCostRecordSchema,
+  InMemoryInfrastructureCostStorage,
+} from "./cloud-billing.js";
+export type {
   ClaudeCodeDeserializerOutput,
   ClaudeCodeSerializerInput,
   ClaudeCodeTaskContext,
@@ -130,6 +150,7 @@ export {
 export type {
   CostDashboardHistoricalConfig,
   CostDashboardHistoryPoint,
+  CostDashboardLineItems,
   CostDashboardRoutingRecommendationConfig,
   CostDashboardSnapshot,
   CostDashboardWindow,
@@ -434,6 +455,13 @@ export {
   McpCapabilityDiscoveryService,
   McpCapabilityManifestSchema,
 } from "./mcp-capability-discovery.js";
+export type {
+  FederatedMcpMarketplacePage,
+  FederatedMcpServerView,
+  McpFederationOrganizationConfig,
+  McpFederationQuery,
+} from "./mcp-federation.js";
+export { InMemoryMcpFederationService } from "./mcp-federation.js";
 export type {
   McpPropagationOptions,
   McpPropagationReport,

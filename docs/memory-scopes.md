@@ -34,6 +34,17 @@ No implicit cross-org, cross-project, or cross-session leakage is allowed.
 Memory entries are shared across tools within the same scope context (`org`, `project`,
 `session`) as soon as they are written.
 
+## Access Control Enforcement (MEM-009)
+
+Read access is enforced by scope context:
+
+- `session` memories are readable only from the originating `{ orgId, projectId, sessionId }`
+- `project` memories are readable only from the originating `{ orgId, projectId }`
+- `org` memories are readable only from matching `{ orgId }`
+
+When a memory exists but is not readable in the caller's context, read APIs return a
+`MemoryAccessDeniedError` with HTTP-compatible `statusCode: 403`.
+
 - Every entry records a `sourceToolId` (defaults to `"unknown"` if omitted)
 - Reads can optionally pass `requestingToolId` via `MemoryReadOptions`
 - Cross-tool reads are audit-visible via metadata fields:
@@ -63,6 +74,21 @@ Manual review queue API:
 
 - `listConflicts(context, { status })`
 - `resolveConflict(conflictId, "accept-incoming" | "keep-existing", context)`
+
+## Bulk Export (MEM-010)
+
+Memory stores support bulk export in portable formats for compliance and migration workflows.
+
+- `MemoryStore.export(context, options)` supports `json` and `csv`
+- Metadata-rich fields are included per row:
+  - `id`, `key`, `content`, `scope`, `tags`, `sourceToolId`
+  - `orgId`, `projectId`, `sessionId`
+  - `createdAt`, `lastAccessedAt`, `expiresAt`, `metadata`
+- Exports support pagination (`limit`, `offset`) for large datasets
+- Exports can be filtered by:
+  - `scope`
+  - `tags` (all requested tags must be present)
+  - creation date range (`startTime`, `endTime`)
 
 ## Audit Trail (MEM-012)
 

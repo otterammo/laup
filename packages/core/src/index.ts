@@ -308,6 +308,8 @@ export type {
   MemoryConflictResolutionStrategy,
   MemoryContext,
   MemoryEmbeddingProvider,
+  MemoryExportOptions,
+  MemoryExportPage,
   MemoryReadOptions,
   MemoryRecord,
   MemoryRetrievalFilter,
@@ -323,6 +325,7 @@ export {
   createMemoryStore,
   createSemanticMemoryStore,
   InMemoryMemoryStore,
+  MemoryAccessDeniedError,
   MemoryConflictError,
   SqlMemoryStore,
 } from "./memory-store.js";

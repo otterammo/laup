@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { InMemoryAuditStorage } from "../audit-storage.js";
 import {
   InMemoryMemoryStore,
+  MemoryAccessDeniedError,
   type MemoryContext,
   type MemoryScope,
   type MemoryStore,
@@ -126,6 +127,49 @@ describe("memory-store", () => {
       sessionId: "session-1",
     });
     expect(otherOrg).toHaveLength(0);
+  });
+
+  it("returns access denied (403) when reading memory id outside allowed context", async () => {
+    await store.write({
+      id: "restricted-project-memory",
+      content: "Sensitive project details",
+      scope: "project",
+      context,
+    });
+
+    await expect(
+      store.getById("restricted-project-memory", {
+        orgId: "org-1",
+        projectId: "project-2",
+        sessionId: "session-1",
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    await expect(
+      store.getById("restricted-project-memory", {
+        orgId: "org-1",
+        projectId: "project-2",
+        sessionId: "session-1",
+      }),
+    ).rejects.toBeInstanceOf(MemoryAccessDeniedError);
+  });
+
+  it("returns access denied (403) when reading memory key outside allowed context", async () => {
+    await store.write({
+      id: "restricted-key-memory",
+      key: "private-checklist",
+      content: "Private checklist",
+      scope: "project",
+      context,
+    });
+
+    await expect(
+      store.getByKey("private-checklist", {
+        orgId: "org-1",
+        projectId: "project-2",
+        sessionId: "session-9",
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
   });
 
   it("assigns a system ID when omitted and supports exact ID lookup", async () => {
@@ -339,6 +383,62 @@ describe("memory-store", () => {
     });
 
     expect(record.sourceToolId).toBe("unknown");
+  });
+
+  it("exports memory in JSON with metadata fields and filters", async () => {
+    await store.write({
+      id: "exp-1",
+      key: "deploy-checklist",
+      content: "Run migrations",
+      scope: "project",
+      context,
+      tags: ["ops", "release"],
+      metadata: { tags: ["ops", "release"], priority: "high" },
+      sourceToolId: "cursor",
+      now: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    await store.write({
+      id: "exp-2",
+      content: "Personal preference",
+      scope: "session",
+      context,
+      tags: ["personal"],
+      now: new Date("2026-01-02T00:00:00.000Z"),
+    });
+
+    await store.getById("exp-1", context);
+
+    const page = await store.export(context, {
+      format: "json",
+      scope: "project",
+      tags: ["ops"],
+      startTime: new Date("2026-01-01T00:00:00.000Z"),
+      endTime: new Date("2026-01-03T00:00:00.000Z"),
+    });
+
+    const rows = JSON.parse(page.data) as Array<Record<string, string>>;
+    expect(page.total).toBe(1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe("exp-1");
+    expect(rows[0]?.scope).toBe("project");
+    expect(rows[0]?.tags).toContain("ops");
+    expect(rows[0]?.sourceToolId).toBe("cursor");
+    expect(rows[0]?.createdAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(rows[0]?.lastAccessedAt).toBeTruthy();
+  });
+
+  it("exports memory in CSV with pagination", async () => {
+    await store.write({ id: "csv-1", content: "one", scope: "project", context });
+    await store.write({ id: "csv-2", content: "two", scope: "project", context });
+
+    const page = await store.export(context, { format: "csv", scope: "project", limit: 1, offset: 0 });
+    const lines = page.data.split("\n");
+
+    expect(page.total).toBe(2);
+    expect(page.hasMore).toBe(true);
+    expect(lines[0]).toContain("id,key,content,scope,tags,sourceToolId");
+    expect(lines[1]).toContain("csv-1");
   });
 
   it("records an audit trail for memory operations", async () => {

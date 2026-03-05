@@ -11,9 +11,11 @@ import {
   BudgetAlertSchema,
   type CostCap,
   calculateLlmCost,
+  evaluateCostCap,
   isCostCapExceeded,
   type LlmUsage,
   type ModelPricing,
+  matchesCostCapScope,
   projectPeriodCost,
   shouldFireAlert,
   type UsageEvent,
@@ -118,6 +120,38 @@ describe("cost-schema", () => {
     it("returns false when cap is disabled", () => {
       const disabledCap = { ...cap, enabled: false };
       expect(isCostCapExceeded(150, disabledCap)).toBe(false);
+    });
+
+    it("only evaluates matching attribution scope when provided", () => {
+      expect(isCostCapExceeded(150, cap, { teamId: "team-a", projectId: "project-1" })).toBe(true);
+      expect(isCostCapExceeded(150, cap, { teamId: "team-b", projectId: "project-1" })).toBe(false);
+    });
+
+    it("evaluates policy action for enforcement semantics", () => {
+      const warnDecision = evaluateCostCap(150, { ...cap, action: "warn" }, { teamId: "team-a" });
+      expect(warnDecision.exceeded).toBe(true);
+      expect(warnDecision.shouldEnforce).toBe(false);
+
+      const blockDecision = evaluateCostCap(150, { ...cap, action: "block" }, { teamId: "team-a" });
+      expect(blockDecision.exceeded).toBe(true);
+      expect(blockDecision.shouldEnforce).toBe(true);
+      expect(blockDecision.action).toBe("block");
+    });
+
+    it("matches cap scope across all configured dimensions", () => {
+      expect(
+        matchesCostCapScope(
+          { teamId: "team-a", projectId: "project-a" },
+          { teamId: "team-a", projectId: "project-a", userId: "user-1" },
+        ),
+      ).toBe(true);
+
+      expect(
+        matchesCostCapScope(
+          { teamId: "team-a", projectId: "project-a" },
+          { teamId: "team-a", projectId: "project-b" },
+        ),
+      ).toBe(false);
     });
   });
 

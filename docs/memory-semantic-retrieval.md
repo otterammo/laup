@@ -6,8 +6,9 @@
 
 - Memories are embedded at write time
 - Embedding model is configurable (`defaultEmbeddingModel` + per-write override)
-- Retrieval ranks results by cosine similarity
+- Retrieval ranks results by cosine similarity with configurable relevance decay
 - Top-K results are supported (`k`, default `10`)
+- Decay rate is configurable via half-life in days (`relevanceHalfLifeDays`)
 - Optional filtered retrieval by memory `tags` and `category`
 
 ## API
@@ -16,7 +17,7 @@ See `packages/core/src/memory-store.ts`:
 
 - `MemoryEmbeddingProvider`
 - `MemoryStore#semanticSearch(query, scope, context, options)`
-- `MemorySearchOptions` (`k`, `embeddingModel`, scope visibility options, retrieval `filter`)
+- `MemorySearchOptions` (`k`, `embeddingModel`, `relevanceHalfLifeDays`, scope visibility options, retrieval `filter`)
 - `MemorySearchResult` (`memory`, `score`)
 
 ## Example

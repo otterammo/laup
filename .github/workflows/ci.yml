@@ -41,8 +41,8 @@ jobs:
           cache: "pnpm"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build core package
-        run: pnpm --filter @laup/core run build
+      - name: Build workspace packages needed by checks
+        run: pnpm --filter @laup/core --filter @laup/aider --filter @laup/claude-code --filter @laup/codex --filter @laup/copilot --filter @laup/cursor --filter @laup/opencode run build
       - name: Run typecheck
         run: pnpm run typecheck
 
@@ -58,8 +58,8 @@ jobs:
           cache: "pnpm"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build core package
-        run: pnpm --filter @laup/core run build
+      - name: Build workspace packages needed by checks
+        run: pnpm --filter @laup/core --filter @laup/aider --filter @laup/claude-code --filter @laup/codex --filter @laup/copilot --filter @laup/cursor --filter @laup/opencode run build
       - name: Run tests
         run: pnpm run test:run
 
@@ -75,8 +75,8 @@ jobs:
           cache: "pnpm"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build core package
-        run: pnpm --filter @laup/core run build
+      - name: Build workspace packages needed by checks
+        run: pnpm --filter @laup/core --filter @laup/aider --filter @laup/claude-code --filter @laup/codex --filter @laup/copilot --filter @laup/cursor --filter @laup/opencode run build
       - name: Run coverage
         run: pnpm run test:run --coverage
 

@@ -54,6 +54,21 @@ export {
   TieredCache,
 } from "./cache.js";
 export type {
+  ChargebackBillingPeriod,
+  ChargebackExportOptions,
+  ChargebackGroupType,
+  ChargebackMappingRule,
+  ChargebackReport,
+  ChargebackReportRow,
+  ChargebackReportServiceConfig,
+  GenerateChargebackReportInput,
+} from "./chargeback-report.js";
+export {
+  ChargebackReportService,
+  createChargebackReportService,
+  exportChargebackReport,
+} from "./chargeback-report.js";
+export type {
   ClaudeCodeDeserializerOutput,
   ClaudeCodeSerializerInput,
   ClaudeCodeTaskContext,

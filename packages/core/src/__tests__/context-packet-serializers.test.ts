@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  deserializeClaudeCodeContext,
+  deserializeCursorContext,
   serializeClaudeCodeContext,
   serializeCursorContext,
 } from "../context-packet-serializers.js";
@@ -146,5 +148,70 @@ describe("context-packet-serializers (HAND-002)", () => {
         },
       }
     `);
+  });
+
+  it("round-trips Claude Code native state and emits MEMORY.md prepend payload", () => {
+    const native = {
+      taskContext: {
+        taskId: "task-5",
+        objective: "Ship HAND-003",
+        status: "running" as const,
+        notes: "Hand off to Cursor next",
+      },
+      activeFiles: ["packages/core/src/context-packet-serializers.ts"],
+      memoryMd: "# Existing Memory\n- item",
+    };
+
+    const packet = serializeClaudeCodeContext({
+      id: "packet-claude-rt",
+      sourceAgent: "claude-code",
+      targetAgent: "cursor",
+      createdAt: "2026-03-04T23:10:00.000Z",
+      task: "Complete HAND-003",
+      native,
+    });
+
+    const restored = deserializeClaudeCodeContext(packet);
+
+    expect(restored.native).toEqual(native);
+    expect(restored.memoryWrite).toEqual({
+      filePath: "MEMORY.md",
+      mode: "prepend",
+      content: "## Handoff Summary\nComplete HAND-003\n\n# Existing Memory\n- item",
+    });
+  });
+
+  it("round-trips Cursor native state and emits notepad/file open actions", () => {
+    const native = {
+      notepads: [
+        {
+          id: "np-22",
+          title: "todo",
+          content: "Wire deserializers",
+        },
+      ],
+      editor: {
+        workspaceRoot: "/repo",
+        openFiles: ["src/a.ts", "src/b.ts"],
+        activeFile: "src/b.ts",
+      },
+    };
+
+    const packet = serializeCursorContext({
+      id: "packet-cursor-rt",
+      sourceAgent: "cursor",
+      targetAgent: "claude-code",
+      createdAt: "2026-03-04T23:10:00.000Z",
+      native,
+    });
+
+    const restored = deserializeCursorContext(packet);
+
+    expect(restored.native).toEqual(native);
+    expect(restored.actions).toEqual({
+      createNotepads: native.notepads,
+      openFiles: native.editor.openFiles,
+      activeFile: native.editor.activeFile,
+    });
   });
 });

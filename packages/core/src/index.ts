@@ -54,13 +54,17 @@ export {
   TieredCache,
 } from "./cache.js";
 export type {
+  ClaudeCodeDeserializerOutput,
   ClaudeCodeSerializerInput,
   ClaudeCodeTaskContext,
+  CursorDeserializerOutput,
   CursorEditorSelection,
   CursorNotepad,
   CursorSerializerInput,
 } from "./context-packet-serializers.js";
 export {
+  deserializeClaudeCodeContext,
+  deserializeCursorContext,
   serializeClaudeCodeContext,
   serializeCursorContext,
 } from "./context-packet-serializers.js";

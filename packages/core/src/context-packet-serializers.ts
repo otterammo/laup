@@ -61,6 +61,24 @@ export interface CursorSerializerInput extends BaseSerializerInput {
   };
 }
 
+export interface ClaudeCodeDeserializerOutput {
+  native: ClaudeCodeSerializerInput["native"];
+  memoryWrite: {
+    filePath: "MEMORY.md";
+    mode: "prepend";
+    content: string;
+  };
+}
+
+export interface CursorDeserializerOutput {
+  native: CursorSerializerInput["native"];
+  actions: {
+    createNotepads: CursorNotepad[];
+    openFiles: string[];
+    activeFile?: string;
+  };
+}
+
 function buildBasePacket(input: BaseSerializerInput): ContextPacket {
   return {
     packetId: input.id,
@@ -115,4 +133,50 @@ export function serializeCursorContext(input: CursorSerializerInput): ContextPac
   };
 
   return ContextPacketSchema.parse(packet);
+}
+
+function prependSummaryToMemory(summary: string, memoryMd: string): string {
+  if (!summary.trim()) {
+    return memoryMd;
+  }
+
+  return `## Handoff Summary\n${summary}\n\n${memoryMd}`;
+}
+
+export function deserializeClaudeCodeContext(packet: ContextPacket): ClaudeCodeDeserializerOutput {
+  const parsed = ContextPacketSchema.parse(packet);
+  const claudeCode = parsed.workingContext["claudeCode"] as
+    | ClaudeCodeSerializerInput["native"]
+    | undefined;
+
+  if (!claudeCode) {
+    throw new Error("Context packet is missing workingContext.claudeCode payload");
+  }
+
+  return {
+    native: claudeCode,
+    memoryWrite: {
+      filePath: "MEMORY.md",
+      mode: "prepend",
+      content: prependSummaryToMemory(parsed.conversationSummary, claudeCode.memoryMd),
+    },
+  };
+}
+
+export function deserializeCursorContext(packet: ContextPacket): CursorDeserializerOutput {
+  const parsed = ContextPacketSchema.parse(packet);
+  const cursor = parsed.workingContext["cursor"] as CursorSerializerInput["native"] | undefined;
+
+  if (!cursor) {
+    throw new Error("Context packet is missing workingContext.cursor payload");
+  }
+
+  return {
+    native: cursor,
+    actions: {
+      createNotepads: cursor.notepads,
+      openFiles: cursor.editor.openFiles,
+      ...(cursor.editor.activeFile ? { activeFile: cursor.editor.activeFile } : {}),
+    },
+  };
 }

@@ -386,6 +386,7 @@ export {
   renderMarketplaceAuthorAnalyticsPage,
   renderMarketplaceHtml,
   renderMarketplacePage,
+  renderSkillBuilderHtml,
 } from "./marketplace.js";
 export type {
   McpCapabilityDashboardServer,

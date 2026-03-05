@@ -174,6 +174,13 @@ export interface AttributionAggregate {
   eventCount: number;
 }
 
+export interface SkillCostAttribution {
+  skillId: string;
+  totalTokens: number;
+  totalCost: number;
+  eventCount: number;
+}
+
 export interface AttributionCombinationAggregate {
   dimensions: Record<AttributionDimension, string>;
   totalCost: number;
@@ -618,6 +625,23 @@ function getEventCost(event: UsageEvent, pricing: Map<string, ModelPricing>): nu
   return calculateLlmCost(data, modelPricing);
 }
 
+function getEventSkillId(event: UsageEvent): string {
+  return (
+    event.attribution.skillId ??
+    (event.type === "skill-invocation" ? (event.data as { skillId: string }).skillId : undefined) ??
+    "unknown"
+  );
+}
+
+function getEventTokenCount(event: UsageEvent): number {
+  if (event.type !== "llm-call") {
+    return 0;
+  }
+
+  const data = event.data as LlmUsage;
+  return data.inputTokens + data.outputTokens;
+}
+
 export function aggregateUsageByAttribution(
   events: UsageEvent[],
   dimension: AttributionDimension,
@@ -692,6 +716,36 @@ export function aggregateUsageBySkill(
   return aggregateUsageByAttribution(events, "skillId", pricing);
 }
 
+export function aggregateSkillCostAttribution(
+  events: UsageEvent[],
+  pricing: Map<string, ModelPricing>,
+): SkillCostAttribution[] {
+  const grouped = new Map<string, SkillCostAttribution>();
+
+  for (const event of events) {
+    const skillId = getEventSkillId(event);
+    const existing = grouped.get(skillId) ?? {
+      skillId,
+      totalTokens: 0,
+      totalCost: 0,
+      eventCount: 0,
+    };
+
+    existing.totalTokens += getEventTokenCount(event);
+    existing.totalCost += getEventCost(event, pricing);
+    existing.eventCount += 1;
+
+    grouped.set(skillId, existing);
+  }
+
+  return Array.from(grouped.values()).sort(
+    (a, b) =>
+      b.totalCost - a.totalCost ||
+      b.totalTokens - a.totalTokens ||
+      a.skillId.localeCompare(b.skillId),
+  );
+}
+
 export function aggregateUsage(
   events: UsageEvent[],
   pricing: Map<string, ModelPricing>,
@@ -724,10 +778,8 @@ export function aggregateUsage(
       outputTokens += data.outputTokens;
     }
 
-    if (event.type === "skill-invocation") {
-      const data = event.data as { skillId: string };
-      bySkill[data.skillId] = (bySkill[data.skillId] ?? 0) + eventCost;
-    }
+    const skillId = getEventSkillId(event);
+    bySkill[skillId] = (bySkill[skillId] ?? 0) + eventCost;
 
     byType[event.type] = (byType[event.type] ?? 0) + eventCost;
     totalCost += eventCost;

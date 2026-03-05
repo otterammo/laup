@@ -92,6 +92,15 @@ export {
   createCostAnomalyDetector,
 } from "./cost-anomaly.js";
 export type {
+  CostAttributionReportServiceConfig,
+  SkillCostAttributionFilter,
+  SkillCostAttributionReport,
+} from "./cost-attribution-report.js";
+export {
+  CostAttributionReportService,
+  createCostAttributionReportService,
+} from "./cost-attribution-report.js";
+export type {
   FallbackPricing,
   LlmCostBreakdown,
   MissingPriceStrategy,
@@ -129,12 +138,14 @@ export type {
   McpInvocationUsage,
   MemoryOperationUsage,
   ModelPricing,
+  SkillCostAttribution,
   SkillInvocationUsage,
   UsageAttribution,
   UsageEvent,
   UsageEventType,
 } from "./cost-schema.js";
 export {
+  aggregateSkillCostAttribution,
   aggregateUsage,
   aggregateUsageByAttribution,
   aggregateUsageByAttributions,

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { CanonicalInstruction, Frontmatter } from "./schema.js";
 
 /**
@@ -35,6 +35,8 @@ const FORMAT_PATTERNS: Record<string, ImportFormat> = {
   windsurfrules: "windsurf",
   "GEMINI.md": "gemini",
   "opencode.md": "opencode",
+  ".opencode.json": "opencode",
+  "opencode.json": "opencode",
   ".aider.conf.yml": "aider",
   "aider.conf.yml": "aider",
   "copilot-instructions.md": "copilot",
@@ -118,7 +120,7 @@ export function importDocument(filePath: string, format?: ImportFormat): ImportR
     case "windsurf":
       return importWindsurf(content);
     case "opencode":
-      return importOpenCode(content);
+      return importOpenCode(content, resolvedPath);
     case "copilot":
       return importCopilot(content);
     default:
@@ -359,15 +361,74 @@ function importWindsurf(content: string): ImportResult {
 }
 
 /**
- * Import from opencode.md format.
+ * Import from OpenCode format (AGENTS/opencode.md + optional .opencode.json config).
  */
-function importOpenCode(content: string): ImportResult {
+function importOpenCode(content: string, filePath: string): ImportResult {
   const warnings: string[] = [];
-  const body = stripGeneratedHeader(content);
+  const frontmatter = defaultFrontmatter();
+  const sourceName = basename(filePath).toLowerCase();
+
+  let body = "";
+  let configContent: string | null = null;
+
+  if (sourceName.endsWith(".json")) {
+    configContent = content;
+    const agentsPath = join(dirname(filePath), "AGENTS.md");
+    if (existsSync(agentsPath)) {
+      body = stripGeneratedHeader(readFileSync(agentsPath, "utf-8"));
+    } else {
+      warnings.push("AGENTS.md not found next to OpenCode config. Body is empty.");
+    }
+  } else {
+    body = stripGeneratedHeader(content);
+    const configPath = join(dirname(filePath), ".opencode.json");
+    if (existsSync(configPath)) {
+      configContent = readFileSync(configPath, "utf-8");
+    }
+  }
+
+  if (configContent) {
+    try {
+      const parsed = JSON.parse(configContent) as Record<string, unknown>;
+      // biome-ignore lint/suspicious/noExplicitAny: Dynamic tool override construction
+      const opencodeOverrides: any = {};
+
+      if (typeof parsed["autoCompact"] === "boolean") {
+        opencodeOverrides.autoCompact = parsed["autoCompact"];
+      }
+
+      if (parsed["agents"] && typeof parsed["agents"] === "object") {
+        const agents = parsed["agents"] as Record<string, unknown>;
+        const coder =
+          agents["coder"] && typeof agents["coder"] === "object"
+            ? (agents["coder"] as Record<string, unknown>)
+            : null;
+
+        if (coder) {
+          if (typeof coder["model"] === "string") {
+            opencodeOverrides.model = coder["model"];
+          }
+          if (typeof coder["maxTokens"] === "number") {
+            opencodeOverrides.maxTokens = coder["maxTokens"];
+          }
+        }
+      }
+
+      if (parsed["mcpServers"] && typeof parsed["mcpServers"] === "object") {
+        opencodeOverrides.mcpServers = parsed["mcpServers"];
+      }
+
+      if (Object.keys(opencodeOverrides).length > 0) {
+        frontmatter.tools = { opencode: opencodeOverrides };
+      }
+    } catch {
+      warnings.push("Failed to parse OpenCode JSON config. Tool overrides were skipped.");
+    }
+  }
 
   return {
     document: {
-      frontmatter: defaultFrontmatter(),
+      frontmatter,
       body,
     },
     warnings,

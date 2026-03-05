@@ -47,3 +47,70 @@ describe("codex import", () => {
     expect(result.document.body).toBe("# Hello from Codex");
   });
 });
+
+describe("opencode import", () => {
+  it("imports mcpServers from .opencode.json alongside AGENTS.md", () => {
+    const dir = join(tmpdir(), `laup-import-${randomUUID()}`);
+    mkdirSync(dir, { recursive: true });
+
+    writeFileSync(join(dir, "AGENTS.md"), "# OpenCode Rules\n\nUse tests.", "utf-8");
+    writeFileSync(
+      join(dir, ".opencode.json"),
+      JSON.stringify(
+        {
+          agents: { coder: { model: "claude-3.7-sonnet", maxTokens: 4000 } },
+          autoCompact: true,
+          mcpServers: {
+            docs: {
+              type: "stdio",
+              command: "npx",
+              args: ["-y", "@modelcontextprotocol/server-filesystem"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
+    const result = importDocument(join(dir, "AGENTS.md"), "opencode");
+
+    expect(result.document.body).toBe("# OpenCode Rules\n\nUse tests.");
+    expect(result.document.frontmatter.tools?.opencode).toMatchObject({
+      model: "claude-3.7-sonnet",
+      maxTokens: 4000,
+      autoCompact: true,
+      mcpServers: {
+        docs: {
+          type: "stdio",
+          command: "npx",
+          args: ["-y", "@modelcontextprotocol/server-filesystem"],
+        },
+      },
+    });
+  });
+
+  it("imports from .opencode.json and reads AGENTS.md body when present", () => {
+    const dir = join(tmpdir(), `laup-import-${randomUUID()}`);
+    mkdirSync(dir, { recursive: true });
+
+    writeFileSync(join(dir, "AGENTS.md"), "# Rules\n\nPrefer strict mode.", "utf-8");
+    const configPath = join(dir, ".opencode.json");
+    writeFileSync(
+      configPath,
+      '{"mcpServers":{"search":{"type":"http","url":"https://mcp.example.com"}}}',
+      "utf-8",
+    );
+
+    const result = importDocument(configPath);
+
+    expect(result.sourceFormat).toBe("opencode");
+    expect(result.document.body).toBe("# Rules\n\nPrefer strict mode.");
+    expect(result.document.frontmatter.tools?.opencode).toMatchObject({
+      mcpServers: {
+        search: { type: "http", url: "https://mcp.example.com" },
+      },
+    });
+  });
+});

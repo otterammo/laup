@@ -4,6 +4,7 @@ import {
   ConfluenceKnowledgeBaseConnector,
   ExternalKnowledgeSyncService,
   isExternalKnowledgeRecord,
+  listMemoryIncludingExternalSources,
   NotionKnowledgeBaseConnector,
   searchMemoryIncludingExternalSources,
 } from "../external-knowledge-base.js";
@@ -148,6 +149,11 @@ describe("external knowledge sync service", () => {
 
     const annotated = annotateExternalKnowledgeResults(results);
     expect(annotated[0]?.external).toBe(true);
+
+    const listed = await listMemoryIncludingExternalSources(memoryStore, "org", CONTEXT, {
+      limit: 10,
+    });
+    expect(listed[0]?.external).toBe(true);
   });
 
   it("uses hourly sync interval by default", () => {

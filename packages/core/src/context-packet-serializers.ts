@@ -1,3 +1,4 @@
+import { gunzipSync, gzipSync } from "node:zlib";
 import {
   type ContextPacket,
   ContextPacketSchema,
@@ -86,6 +87,62 @@ export interface DeserializeContextSecurityOptions {
   logRejection?: (entry: { packetId?: string; sendingTool?: string; reasons: string[] }) => void;
 }
 
+export const DEFAULT_PACKET_COMPRESSION_THRESHOLD_BYTES = 256 * 1024;
+
+/**
+ * Compression algorithm used for HAND-010 transport packets.
+ * We use gzip for broad runtime compatibility.
+ */
+export type ContextPacketCompressionAlgorithm = "gzip";
+
+export interface CompressedContextPacketEnvelope {
+  compressed: true;
+  compressionAlgorithm: ContextPacketCompressionAlgorithm;
+  originalSizeBytes: number;
+  payloadBase64: string;
+}
+
+export type ContextPacketTransport = ContextPacket | CompressedContextPacketEnvelope;
+
+function isCompressedEnvelope(candidate: unknown): candidate is CompressedContextPacketEnvelope {
+  if (!candidate || typeof candidate !== "object") return false;
+  const record = candidate as Record<string, unknown>;
+  return (
+    record["compressed"] === true &&
+    record["compressionAlgorithm"] === "gzip" &&
+    typeof record["originalSizeBytes"] === "number" &&
+    typeof record["payloadBase64"] === "string"
+  );
+}
+
+export function compressContextPacketForTransport(
+  packet: ContextPacket,
+  thresholdBytes = DEFAULT_PACKET_COMPRESSION_THRESHOLD_BYTES,
+): ContextPacketTransport {
+  const json = JSON.stringify(packet);
+  const originalSizeBytes = Buffer.byteLength(json, "utf8");
+
+  if (originalSizeBytes <= thresholdBytes) {
+    return packet;
+  }
+
+  return {
+    compressed: true,
+    compressionAlgorithm: "gzip",
+    originalSizeBytes,
+    payloadBase64: gzipSync(json).toString("base64"),
+  };
+}
+
+export function decompressContextPacketForValidation(candidate: unknown): unknown {
+  if (!isCompressedEnvelope(candidate)) {
+    return candidate;
+  }
+
+  const inflated = gunzipSync(Buffer.from(candidate.payloadBase64, "base64")).toString("utf8");
+  return JSON.parse(inflated) as unknown;
+}
+
 function buildBasePacket(input: BaseSerializerInput): ContextPacket {
   return {
     packetId: input.id,
@@ -142,6 +199,20 @@ export function serializeCursorContext(input: CursorSerializerInput): ContextPac
   return ContextPacketSchema.parse(packet);
 }
 
+export function serializeClaudeCodeContextForTransport(
+  input: ClaudeCodeSerializerInput,
+  thresholdBytes = DEFAULT_PACKET_COMPRESSION_THRESHOLD_BYTES,
+): ContextPacketTransport {
+  return compressContextPacketForTransport(serializeClaudeCodeContext(input), thresholdBytes);
+}
+
+export function serializeCursorContextForTransport(
+  input: CursorSerializerInput,
+  thresholdBytes = DEFAULT_PACKET_COMPRESSION_THRESHOLD_BYTES,
+): ContextPacketTransport {
+  return compressContextPacketForTransport(serializeCursorContext(input), thresholdBytes);
+}
+
 function prependSummaryToMemory(summary: string, memoryMd: string): string {
   if (!summary.trim()) {
     return memoryMd;
@@ -154,7 +225,12 @@ export function deserializeClaudeCodeContext(
   packet: unknown,
   options: DeserializeContextSecurityOptions,
 ): ClaudeCodeDeserializerOutput {
-  const validated = validateIncomingContextPacket(packet, options.policy, options.logRejection);
+  const decompressed = decompressContextPacketForValidation(packet);
+  const validated = validateIncomingContextPacket(
+    decompressed,
+    options.policy,
+    options.logRejection,
+  );
   if (!validated.valid || !validated.packet) {
     throw new Error(`Context packet rejected: ${validated.reasons.join("; ")}`);
   }
@@ -182,7 +258,12 @@ export function deserializeCursorContext(
   packet: unknown,
   options: DeserializeContextSecurityOptions,
 ): CursorDeserializerOutput {
-  const validated = validateIncomingContextPacket(packet, options.policy, options.logRejection);
+  const decompressed = decompressContextPacketForValidation(packet);
+  const validated = validateIncomingContextPacket(
+    decompressed,
+    options.policy,
+    options.logRejection,
+  );
   if (!validated.valid || !validated.packet) {
     throw new Error(`Context packet rejected: ${validated.reasons.join("; ")}`);
   }

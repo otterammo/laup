@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  aggregateSkillCostAttribution,
   aggregateUsage,
   aggregateUsageByAttribution,
   aggregateUsageByAttributions,
@@ -49,14 +50,24 @@ describe("cost-schema", () => {
       id: "evt-1",
       type: "llm-call",
       timestamp: "2026-01-15T10:00:00Z",
-      attribution: { userId: "user-1", teamId: "team-a", projectId: "project-a" },
+      attribution: {
+        userId: "user-1",
+        teamId: "team-a",
+        projectId: "project-a",
+        skillId: "acme/code-review",
+      },
       data: sampleLlmUsage,
     },
     {
       id: "evt-2",
       type: "llm-call",
       timestamp: "2026-01-15T11:00:00Z",
-      attribution: { userId: "user-2", teamId: "team-a", projectId: "project-a" },
+      attribution: {
+        userId: "user-2",
+        teamId: "team-a",
+        projectId: "project-a",
+        skillId: "acme/security-audit",
+      },
       data: { ...sampleLlmUsage, inputTokens: 2000, outputTokens: 1000 },
     },
     {
@@ -280,6 +291,24 @@ describe("cost-schema", () => {
     });
   });
 
+  describe("aggregateSkillCostAttribution", () => {
+    it("returns per-skill tokens and costs ranked by cost", () => {
+      const report = aggregateSkillCostAttribution(events, pricingMap);
+
+      expect(report[0]).toMatchObject({
+        skillId: "acme/security-audit",
+        totalTokens: 3000,
+      });
+      expect(report[0]?.totalCost).toBeCloseTo(0.021, 6);
+
+      expect(report[1]).toMatchObject({
+        skillId: "acme/code-review",
+        totalTokens: 1500,
+      });
+      expect(report[1]?.totalCost).toBeCloseTo(0.0105, 6);
+    });
+  });
+
   describe("aggregateUsage", () => {
     it("aggregates costs by type", () => {
       const summary = aggregateUsage(events, pricingMap, "2026-01-15", "2026-01-16");
@@ -290,6 +319,12 @@ describe("cost-schema", () => {
     it("aggregates costs by provider", () => {
       const summary = aggregateUsage(events, pricingMap, "2026-01-15", "2026-01-16");
       expect(summary.byProvider?.["anthropic"]).toBeGreaterThan(0);
+    });
+
+    it("attributes llm costs by skill", () => {
+      const summary = aggregateUsage(events, pricingMap, "2026-01-15", "2026-01-16");
+      expect(summary.bySkill?.["acme/security-audit"]).toBeCloseTo(0.021, 6);
+      expect(summary.bySkill?.["acme/code-review"]).toBeCloseTo(0.0105, 6);
     });
 
     it("aggregates token counts", () => {

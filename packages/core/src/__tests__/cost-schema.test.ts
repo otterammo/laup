@@ -12,6 +12,7 @@ import {
   type CostCap,
   calculateLlmCost,
   evaluateCostCap,
+  exportCostSummary,
   isCostCapExceeded,
   type LlmUsage,
   type ModelPricing,
@@ -306,6 +307,29 @@ describe("cost-schema", () => {
       const summary = aggregateUsage(events, pricingMap, "2026-01-15", "2026-01-16");
       expect(summary.periodStart).toBe("2026-01-15");
       expect(summary.periodEnd).toBe("2026-01-16");
+    });
+  });
+
+  describe("exportCostSummary", () => {
+    it("exports cost summary as JSON", () => {
+      const summary = aggregateUsage(events, pricingMap, "2026-01-15", "2026-01-16");
+      const json = exportCostSummary(summary, { format: "json" });
+      const parsed = JSON.parse(json) as Array<Record<string, unknown>>;
+
+      expect(parsed[0]?.["dimension"]).toBe("total");
+      expect(parsed[0]?.["key"]).toBe("totalCost");
+      expect(
+        parsed.some((row) => row["dimension"] === "byProvider" && row["key"] === "anthropic"),
+      ).toBe(true);
+    });
+
+    it("exports cost summary as CSV", () => {
+      const summary = aggregateUsage(events, pricingMap, "2026-01-15", "2026-01-16");
+      const csv = exportCostSummary(summary, { format: "csv" });
+      const lines = csv.split("\n");
+
+      expect(lines[0]).toBe("periodStart,periodEnd,currency,dimension,key,cost");
+      expect(lines.some((line) => line.includes(",byType,llm-call,"))).toBe(true);
     });
   });
 });

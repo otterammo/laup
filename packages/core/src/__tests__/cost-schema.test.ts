@@ -8,11 +8,13 @@ import {
   aggregateUsageBySkill,
   aggregateUsageByTeam,
   type BudgetAlert,
+  BudgetAlertSchema,
   type CostCap,
   calculateLlmCost,
   isCostCapExceeded,
   type LlmUsage,
   type ModelPricing,
+  projectPeriodCost,
   shouldFireAlert,
   type UsageEvent,
 } from "../cost-schema.js";
@@ -145,6 +147,75 @@ describe("cost-schema", () => {
     it("returns false when alert is disabled", () => {
       const disabledAlert = { ...alert, enabled: false };
       expect(shouldFireAlert(100, disabledAlert)).toBe(false);
+    });
+
+    it("supports percentage-based thresholds against configured budget", () => {
+      const percentageAlert: BudgetAlert = {
+        id: "alert-2",
+        name: "Budget Percent Alert",
+        budget: 200,
+        percentages: [75, 90, 100],
+        period: "monthly",
+        recipients: ["finance@example.com"],
+        enabled: true,
+        channels: ["email", "slack"],
+      };
+
+      expect(shouldFireAlert(149, percentageAlert)).toBe(false);
+      expect(shouldFireAlert(150, percentageAlert)).toBe(true);
+    });
+
+    it("supports projected spend alerts using current spend rate", () => {
+      const projectedAlert: BudgetAlert = {
+        id: "alert-3",
+        name: "Projected Overrun Alert",
+        budget: 100,
+        percentages: [100],
+        projected: true,
+        period: "monthly",
+        recipients: ["ops@example.com"],
+        enabled: true,
+        channels: ["email"],
+      };
+
+      // $10 spent in first 10% of period projects to $100 total by period end.
+      expect(shouldFireAlert(10, projectedAlert, { elapsedMs: 10, periodMs: 100 })).toBe(true);
+    });
+
+    it("projects period cost from spend rate", () => {
+      expect(projectPeriodCost(10, 10, 100)).toBe(100);
+      expect(projectPeriodCost(10, 0, 100)).toBe(10);
+    });
+
+    it("validates attribution dimension + value pairing", () => {
+      expect(
+        BudgetAlertSchema.safeParse({
+          id: "alert-4",
+          name: "Team Budget Alert",
+          budget: 100,
+          percentages: [100],
+          period: "monthly",
+          recipients: ["ops@example.com"],
+          enabled: true,
+          channels: ["email", "slack"],
+          attributionDimension: "teamId",
+          attributionValue: "team-1",
+        }).success,
+      ).toBe(true);
+
+      expect(
+        BudgetAlertSchema.safeParse({
+          id: "alert-5",
+          name: "Invalid Team Alert",
+          budget: 100,
+          percentages: [100],
+          period: "monthly",
+          recipients: ["ops@example.com"],
+          enabled: true,
+          channels: ["email"],
+          attributionDimension: "teamId",
+        }).success,
+      ).toBe(false);
     });
   });
 

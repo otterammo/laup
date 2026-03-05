@@ -5,6 +5,8 @@ import {
   canForkSkill,
   canInstallSkill,
   detectCircularDependency,
+  executeSkillPipeline,
+  findSkillByCommand,
   getComposedSkillDependencies,
   getDeprecationNotice,
   getRunnableTests,
@@ -463,6 +465,96 @@ prompt: Hello {{name}}
         ],
       });
       expect(result.valid).toBe(true);
+    });
+  });
+
+  describe("pipeline mode (SKILL-014)", () => {
+    const normalizeSkill: Skill = {
+      ...validSkill,
+      name: "acme/normalize",
+      trigger: { command: "/normalize" },
+      prompt: "normalize",
+      parameters: [{ name: "input", type: "string", required: true }],
+    };
+
+    const summarizeSkill: Skill = {
+      ...validSkill,
+      name: "acme/summarize",
+      trigger: { command: "/summarize" },
+      prompt: "summarize",
+      parameters: [{ name: "input", type: "string", required: true }],
+    };
+
+    const pipelineSkill: Skill = {
+      ...validSkill,
+      name: "acme/pipeline",
+      trigger: { command: "/pipeline" },
+      mode: "pipeline",
+      steps: [
+        { skill: "acme/normalize", params: { input: "text" }, as: "normalized" },
+        { skill: "acme/summarize", params: { input: "normalized" } },
+      ],
+    };
+
+    it("validates schema for pipeline mode", () => {
+      const result = validateSkill(pipelineSkill);
+      expect(result.valid).toBe(true);
+    });
+
+    it("passes step output to next step as input context", async () => {
+      const skills = new Map<string, Skill>([
+        ["acme/normalize", normalizeSkill],
+        ["acme/summarize", summarizeSkill],
+      ]);
+
+      const executed = await executeSkillPipeline(
+        pipelineSkill,
+        { text: "  hello world  " },
+        {
+          resolveSkill: (name) => skills.get(name),
+          executeStep: (_skill, params) => String(params["input"]).trim().toUpperCase(),
+        },
+      );
+
+      expect(executed.success).toBe(true);
+      expect(executed.steps).toHaveLength(2);
+      expect(executed.steps[0]?.output).toBe("HELLO WORLD");
+      expect(executed.steps[1]?.input["input"]).toBe("HELLO WORLD");
+      expect(executed.finalOutput).toBe("HELLO WORLD");
+    });
+
+    it("halts on pipeline step failure with clear error", async () => {
+      const skills = new Map<string, Skill>([
+        ["acme/normalize", normalizeSkill],
+        ["acme/summarize", summarizeSkill],
+      ]);
+
+      const executed = await executeSkillPipeline(
+        pipelineSkill,
+        { text: "hello" },
+        {
+          resolveSkill: (name) => skills.get(name),
+          executeStep: (stepSkill, params) => {
+            if (stepSkill.name === "acme/summarize") {
+              throw new Error(`Unable to summarize: ${String(params["input"])}`);
+            }
+            return String(params["input"]).toUpperCase();
+          },
+        },
+      );
+
+      expect(executed.success).toBe(false);
+      expect(executed.steps).toHaveLength(1);
+      expect(executed.error).toEqual({
+        stepIndex: 1,
+        stepSkill: "acme/summarize",
+        message: "Unable to summarize: HELLO",
+      });
+    });
+
+    it("finds pipeline by slash command", () => {
+      const match = findSkillByCommand([normalizeSkill, pipelineSkill], "/pipeline");
+      expect(match?.name).toBe("acme/pipeline");
     });
   });
 

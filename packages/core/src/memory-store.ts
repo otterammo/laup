@@ -101,6 +101,26 @@ export interface MemorySearchResult {
   score: number;
 }
 
+export type MemoryExportFormat = "json" | "csv";
+
+export interface MemoryExportOptions {
+  format: MemoryExportFormat;
+  scope?: MemoryScope;
+  tags?: string[];
+  startTime?: Date;
+  endTime?: Date;
+  limit?: number;
+  offset?: number;
+}
+
+export interface MemoryExportPage {
+  data: string;
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 export class MemoryAccessDeniedError extends Error {
   readonly statusCode = 403;
   readonly code = "MEMORY_ACCESS_DENIED";
@@ -137,6 +157,7 @@ export interface MemoryStore {
     context: MemoryContext,
     options?: MemorySearchOptions,
   ): Promise<MemorySearchResult[]>;
+  export(context: MemoryContext, options: MemoryExportOptions): Promise<MemoryExportPage>;
   pruneExpired(now?: Date): Promise<number>;
   listConflicts(
     context: MemoryContext,
@@ -192,6 +213,61 @@ function normalizeTags(tags?: string[]): string[] | undefined {
 function normalizeCategory(category?: string): string | undefined {
   const normalized = category?.trim().toLowerCase();
   return normalized ? normalized : undefined;
+}
+
+function getRecordTags(record: MemoryRecord): string[] {
+  if (record.tags && record.tags.length > 0) {
+    return record.tags;
+  }
+  const metadataTags = record.metadata?.["tags"];
+  if (Array.isArray(metadataTags)) {
+    return metadataTags.filter((tag): tag is string => typeof tag === "string");
+  }
+  return [];
+}
+
+function toExportRow(record: MemoryRecord): Record<string, unknown> {
+  return {
+    id: record.id,
+    key: record.key ?? "",
+    content: record.content,
+    scope: record.scope,
+    tags: getRecordTags(record),
+    sourceToolId: record.sourceToolId ?? "unknown",
+    createdAt: record.createdAt,
+    lastAccessedAt:
+      typeof record.metadata?.["lastAccessedAt"] === "string"
+        ? record.metadata["lastAccessedAt"]
+        : record.createdAt,
+  };
+}
+
+function escapeCsv(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const text = Array.isArray(value) ? value.join("|") : String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function serializeExport(rows: Array<Record<string, unknown>>, format: MemoryExportFormat): string {
+  if (format === "json") {
+    return JSON.stringify(rows);
+  }
+
+  const headers = [
+    "id",
+    "key",
+    "content",
+    "scope",
+    "tags",
+    "sourceToolId",
+    "createdAt",
+    "lastAccessedAt",
+  ];
+  const lines = [headers.join(",")];
+  for (const row of rows) {
+    lines.push(headers.map((header) => escapeCsv(row[header])).join(","));
+  }
+  return lines.join("\n");
 }
 
 function matchesFilter(record: MemoryRecord, filter?: MemoryRetrievalFilter): boolean {
@@ -770,6 +846,42 @@ export class InMemoryMemoryStore implements MemoryStore {
       .slice(0, k);
   }
 
+  async export(context: MemoryContext, options: MemoryExportOptions): Promise<MemoryExportPage> {
+    const offset = Math.max(0, options.offset ?? 0);
+    const limit = Math.max(1, options.limit ?? 100);
+    const requiredTags = normalizeTags(options.tags) ?? [];
+
+    const records = Array.from(this.records.values())
+      .filter((record) => record.orgId === context.orgId)
+      .filter((record) => !options.scope || record.scope === options.scope)
+      .filter(
+        (record) =>
+          !context.projectId || record.projectId === context.projectId || !record.projectId,
+      )
+      .filter(
+        (record) =>
+          !context.sessionId || record.sessionId === context.sessionId || !record.sessionId,
+      )
+      .filter((record) => !options.startTime || new Date(record.createdAt) >= options.startTime)
+      .filter((record) => !options.endTime || new Date(record.createdAt) < options.endTime)
+      .filter(
+        (record) =>
+          requiredTags.length === 0 ||
+          requiredTags.every((tag) => getRecordTags(record).includes(tag)),
+      )
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+    const page = records.slice(offset, offset + limit).map((record) => toExportRow(record));
+
+    return {
+      data: serializeExport(page, options.format),
+      total: records.length,
+      limit,
+      offset,
+      hasMore: offset + limit < records.length,
+    };
+  }
+
   async pruneExpired(now = new Date()): Promise<number> {
     let removed = 0;
     for (const [id, record] of this.records) {
@@ -1121,7 +1233,6 @@ export class SqlMemoryStore implements MemoryStore {
     const requestingToolId = options?.requestingToolId;
 
     const row = await this.db.queryOne<MemoryRow>(
-
       `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, tags, category, source_tool_id, embedding, embedding_model, created_at, expires_at
        FROM memories
        WHERE id = ?`,
@@ -1202,7 +1313,6 @@ export class SqlMemoryStore implements MemoryStore {
     const requestingToolId = options?.requestingToolId;
 
     const row = await this.db.queryOne<MemoryRow>(
-
       `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, tags, category, source_tool_id, embedding, embedding_model, created_at, expires_at
        FROM memories
        WHERE org_id = ?
@@ -1465,7 +1575,11 @@ export class SqlMemoryStore implements MemoryStore {
 
     const records = rows.rows
       .map((row) => this.rowToRecord(row))
-      .filter((record) => requiredTags.length === 0 || requiredTags.every((tag) => getRecordTags(record).includes(tag)));
+      .filter(
+        (record) =>
+          requiredTags.length === 0 ||
+          requiredTags.every((tag) => getRecordTags(record).includes(tag)),
+      );
     const serialized = records.map((record) => toExportRow(record));
 
     const total = Number(countResult?.total ?? 0);

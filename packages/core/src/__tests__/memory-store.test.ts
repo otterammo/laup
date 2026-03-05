@@ -417,22 +417,27 @@ describe("memory-store", () => {
       endTime: new Date("2026-01-03T00:00:00.000Z"),
     });
 
-    const rows = JSON.parse(page.data) as Array<Record<string, string>>;
+    const rows = JSON.parse(page.data) as Array<Record<string, unknown>>;
     expect(page.total).toBe(1);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.id).toBe("exp-1");
-    expect(rows[0]?.scope).toBe("project");
-    expect(rows[0]?.tags).toContain("ops");
-    expect(rows[0]?.sourceToolId).toBe("cursor");
-    expect(rows[0]?.createdAt).toBe("2026-01-01T00:00:00.000Z");
-    expect(rows[0]?.lastAccessedAt).toBeTruthy();
+    expect(rows[0]?.["id"]).toBe("exp-1");
+    expect(rows[0]?.["scope"]).toBe("project");
+    expect(rows[0]?.["tags"]).toContain("ops");
+    expect(rows[0]?.["sourceToolId"]).toBe("cursor");
+    expect(rows[0]?.["createdAt"]).toBe("2026-01-01T00:00:00.000Z");
+    expect(rows[0]?.["lastAccessedAt"]).toBeTruthy();
   });
 
   it("exports memory in CSV with pagination", async () => {
     await store.write({ id: "csv-1", content: "one", scope: "project", context });
     await store.write({ id: "csv-2", content: "two", scope: "project", context });
 
-    const page = await store.export(context, { format: "csv", scope: "project", limit: 1, offset: 0 });
+    const page = await store.export(context, {
+      format: "csv",
+      scope: "project",
+      limit: 1,
+      offset: 0,
+    });
     const lines = page.data.split("\n");
 
     expect(page.total).toBe(2);

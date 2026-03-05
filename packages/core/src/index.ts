@@ -61,6 +61,7 @@ export type {
   CursorEditorSelection,
   CursorNotepad,
   CursorSerializerInput,
+  DeserializeContextSecurityOptions,
 } from "./context-packet-serializers.js";
 export {
   deserializeClaudeCodeContext,
@@ -222,6 +223,8 @@ export type {
   HandoffRoutingDecision,
   HandoffStatus,
   HandoffTemplate,
+  IncomingPacketPolicy,
+  IncomingPacketValidationResult,
   SecurityValidationResult,
 } from "./handoff-schema.js";
 export {
@@ -237,6 +240,7 @@ export {
   HandoffStatusSchema,
   HandoffTemplateSchema,
   shouldCompressPacket,
+  validateIncomingContextPacket,
   validatePacketSecurity,
 } from "./handoff-schema.js";
 export type { HierarchyLoadResult, HierarchyOptions } from "./hierarchy.js";

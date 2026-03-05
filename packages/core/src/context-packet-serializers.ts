@@ -3,6 +3,8 @@ import {
   ContextPacketSchema,
   type HandoffMode,
   type HandoffRouting,
+  type IncomingPacketPolicy,
+  validateIncomingContextPacket,
 } from "./handoff-schema.js";
 
 type PacketPriority = "low" | "normal" | "high" | "urgent";
@@ -79,6 +81,11 @@ export interface CursorDeserializerOutput {
   };
 }
 
+export interface DeserializeContextSecurityOptions {
+  policy: IncomingPacketPolicy;
+  logRejection?: (entry: { packetId?: string; sendingTool?: string; reasons: string[] }) => void;
+}
+
 function buildBasePacket(input: BaseSerializerInput): ContextPacket {
   return {
     packetId: input.id,
@@ -143,8 +150,16 @@ function prependSummaryToMemory(summary: string, memoryMd: string): string {
   return `## Handoff Summary\n${summary}\n\n${memoryMd}`;
 }
 
-export function deserializeClaudeCodeContext(packet: ContextPacket): ClaudeCodeDeserializerOutput {
-  const parsed = ContextPacketSchema.parse(packet);
+export function deserializeClaudeCodeContext(
+  packet: unknown,
+  options: DeserializeContextSecurityOptions,
+): ClaudeCodeDeserializerOutput {
+  const validated = validateIncomingContextPacket(packet, options.policy, options.logRejection);
+  if (!validated.valid || !validated.packet) {
+    throw new Error(`Context packet rejected: ${validated.reasons.join("; ")}`);
+  }
+
+  const parsed = ContextPacketSchema.parse(validated.packet);
   const claudeCode = parsed.workingContext["claudeCode"] as
     | ClaudeCodeSerializerInput["native"]
     | undefined;
@@ -163,8 +178,16 @@ export function deserializeClaudeCodeContext(packet: ContextPacket): ClaudeCodeD
   };
 }
 
-export function deserializeCursorContext(packet: ContextPacket): CursorDeserializerOutput {
-  const parsed = ContextPacketSchema.parse(packet);
+export function deserializeCursorContext(
+  packet: unknown,
+  options: DeserializeContextSecurityOptions,
+): CursorDeserializerOutput {
+  const validated = validateIncomingContextPacket(packet, options.policy, options.logRejection);
+  if (!validated.valid || !validated.packet) {
+    throw new Error(`Context packet rejected: ${validated.reasons.join("; ")}`);
+  }
+
+  const parsed = ContextPacketSchema.parse(validated.packet);
   const cursor = parsed.workingContext["cursor"] as CursorSerializerInput["native"] | undefined;
 
   if (!cursor) {

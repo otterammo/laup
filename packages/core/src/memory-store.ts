@@ -4,6 +4,7 @@
  */
 
 import type { AuditStorage } from "./audit-storage.js";
+import { type ExportResult, exportToCsv, exportToJson } from "./data-export.js";
 import type { DbAdapter } from "./db-adapter.js";
 
 export type MemoryScope = "session" | "project" | "org";
@@ -1392,6 +1393,147 @@ export class SqlMemoryStore implements MemoryStore {
       ...(row.embedding_model ? { embeddingModel: String(row.embedding_model) } : {}),
     };
   }
+}
+
+export type MemoryExportFormat = "json" | "csv";
+
+export interface MemoryExportOptions {
+  format: MemoryExportFormat;
+  context: MemoryContext;
+  scope?: MemoryScope;
+  tags?: string[];
+  startDate?: Date;
+  endDate?: Date;
+  includeSharedFromBroaderScopes?: boolean;
+  pageSize?: number;
+  cursor?: string;
+}
+
+export interface MemoryExportPage {
+  records: MemoryRecord[];
+  nextCursor?: string;
+}
+
+export interface MemoryExportResult extends ExportResult {
+  nextCursor?: string;
+}
+
+function getExportScopes(context: MemoryContext, scope?: MemoryScope): MemoryScope[] {
+  if (scope) return [scope];
+
+  const scopes: MemoryScope[] = ["org"];
+  if (context.projectId) scopes.push("project");
+  if (context.projectId && context.sessionId) scopes.push("session");
+  return scopes;
+}
+
+function toExportRow(record: MemoryRecord): Record<string, unknown> {
+  const metadata = record.metadata ?? {};
+  const metadataLastAccessed = metadata.lastAccessedAt;
+
+  return {
+    id: record.id,
+    key: record.key ?? null,
+    scope: record.scope,
+    content: record.content,
+    orgId: record.orgId,
+    projectId: record.projectId ?? null,
+    sessionId: record.sessionId ?? null,
+    tags: record.tags ?? [],
+    category: record.category ?? null,
+    sourceToolId: record.sourceToolId ?? "unknown",
+    createdAt: record.createdAt,
+    lastAccessedAt: typeof metadataLastAccessed === "string" ? metadataLastAccessed : null,
+    expiresAt: record.expiresAt ?? null,
+    metadata,
+  };
+}
+
+async function pageExportRecords(
+  store: MemoryStore,
+  options: Omit<MemoryExportOptions, "format">,
+): Promise<MemoryExportPage> {
+  const scopes = getExportScopes(options.context, options.scope);
+  const includeShared = options.includeSharedFromBroaderScopes ?? false;
+  const all = await Promise.all(
+    scopes.map((scope) =>
+      store.listByScope(scope, options.context, {
+        includeSharedFromBroaderScopes: includeShared,
+      }),
+    ),
+  );
+
+  const seen = new Set<string>();
+  const filtered = all
+    .flat()
+    .filter((record) => {
+      if (seen.has(record.id)) return false;
+      seen.add(record.id);
+
+      if (options.tags && options.tags.length > 0) {
+        const requiredTags = normalizeTags(options.tags) ?? [];
+        const recordTags = new Set(record.tags ?? []);
+        if (requiredTags.some((tag) => !recordTags.has(tag))) return false;
+      }
+
+      const createdAtMs = new Date(record.createdAt).getTime();
+      if (options.startDate && createdAtMs < options.startDate.getTime()) return false;
+      if (options.endDate && createdAtMs > options.endDate.getTime()) return false;
+      return true;
+    })
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  const pageSize = Math.max(1, options.pageSize ?? 1000);
+  const offset = Number.parseInt(options.cursor ?? "0", 10);
+  const safeOffset = Number.isNaN(offset) || offset < 0 ? 0 : offset;
+  const records = filtered.slice(safeOffset, safeOffset + pageSize);
+  const nextOffset = safeOffset + records.length;
+
+  return {
+    records,
+    ...(nextOffset < filtered.length ? { nextCursor: String(nextOffset) } : {}),
+  };
+}
+
+export async function exportMemories(
+  store: MemoryStore,
+  options: MemoryExportOptions,
+): Promise<MemoryExportResult> {
+  const page = await pageExportRecords(store, options);
+  const rows = page.records.map(toExportRow);
+  const fields = [
+    "id",
+    "key",
+    "scope",
+    "content",
+    "orgId",
+    "projectId",
+    "sessionId",
+    "tags",
+    "category",
+    "sourceToolId",
+    "createdAt",
+    "lastAccessedAt",
+    "expiresAt",
+    "metadata",
+  ];
+
+  const result =
+    options.format === "csv"
+      ? exportToCsv(rows, { fields })
+      : exportToJson(rows, { fields, pretty: true });
+
+  return {
+    ...result,
+    ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
+  };
+}
+
+export async function listMemoriesForExport(
+  store: MemoryStore,
+  options: Omit<MemoryExportOptions, "format">,
+): Promise<MemoryExportPage> {
+  return pageExportRecords(store, options);
 }
 
 export function createMemoryStore(db: DbAdapter, options?: MemoryStoreRuntimeOptions): MemoryStore {

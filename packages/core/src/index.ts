@@ -329,6 +329,7 @@ export {
   exportMemories,
   InMemoryMemoryStore,
   listMemoriesForExport,
+  MemoryAccessDeniedError,
   MemoryConflictError,
   SqlMemoryStore,
 } from "./memory-store.js";

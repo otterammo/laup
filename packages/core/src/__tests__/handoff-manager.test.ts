@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InMemoryHandoffHistoryStorage } from "../handoff-history.js";
 import { HandoffManager, HandoffTimeoutError } from "../handoff-manager.js";
+import { createHandoffQueue } from "../handoff-queue.js";
 import type { ContextPacket } from "../handoff-schema.js";
 
 describe("handoff-manager (HAND-004)", () => {
@@ -112,6 +113,40 @@ describe("handoff-manager (HAND-004)", () => {
     expect(result.history.timestamps.sent).toBeDefined();
     expect(result.history.timestamps.acknowledged).toBe("2026-03-05T07:00:10Z");
     expect(result.history.timestamps.completed).toBeDefined();
+  });
+
+  it("queues delivery in async mode and returns queue record", async () => {
+    const handoffQueue = createHandoffQueue();
+    const manager = new HandoffManager({ handoffQueue });
+
+    const result = await manager.send(packet, {
+      sourceAgent: "sender-1",
+      targetAgent: "receiver-1",
+      mode: "async",
+    });
+
+    expect(result.status).toBe("sent");
+    expect(result.queueRecord).toMatchObject({
+      packetId: packet.packetId,
+      status: "queued",
+    });
+
+    const queuedStatus = await handoffQueue.getStatus(packet.packetId);
+    expect(queuedStatus?.status).toBe("queued");
+    expect(result.history.mode).toBe("async");
+    expect(result.history.status).toBe("sent");
+  });
+
+  it("requires a queue when mode is async", async () => {
+    const manager = new HandoffManager();
+
+    await expect(
+      manager.send(packet, {
+        sourceAgent: "sender-1",
+        targetAgent: "receiver-1",
+        mode: "async",
+      }),
+    ).rejects.toThrow(/handoffQueue is required for async handoff mode/i);
   });
 
   it("writes handoff lifecycle events into HAND-008 storage", async () => {

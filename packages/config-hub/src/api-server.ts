@@ -67,7 +67,11 @@ export class ConfigApiServer {
         });
       if (error instanceof SyntaxError)
         return this.respond(res, 400, { error: { code: "INVALID_JSON", message: error.message } });
-      return this.respond(res, 500, { error: { code: "INTERNAL_ERROR", message: String(error) } });
+      // Log unexpected errors on the server, but do not expose details to the client.
+      console.error("Unhandled error in ConfigApiServer.handle:", error);
+      return this.respond(res, 500, {
+        error: { code: "INTERNAL_ERROR", message: "Internal server error" },
+      });
     }
   }
 

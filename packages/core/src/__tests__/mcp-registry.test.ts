@@ -80,4 +80,34 @@ describe("mcp-registry", () => {
     const freshRead = await registry.queryAudit({ operation: "register" });
     expect(freshRead[0]?.actor).toBe("alice");
   });
+
+  it("blocks deregistration when orphaned references exist", async () => {
+    const registry = new InMemoryMcpServerRegistry();
+    await registry.init();
+    await registry.register(baseServer, { actor: "alice" });
+
+    await expect(
+      registry.deregister(baseServer.id, { actor: "alice" }, "project", "proj-1", async () => ({
+        safe: false,
+        references: [{ type: "tool", id: "cursor", name: "Cursor" }],
+      })),
+    ).rejects.toThrow("orphaned references");
+
+    expect(await registry.get(baseServer.id, "project", "proj-1")).not.toBeNull();
+    expect(await registry.queryAudit({ operation: "deregister" })).toHaveLength(0);
+  });
+
+  it("supports graceful deregistration with orphan check", async () => {
+    const registry = new InMemoryMcpServerRegistry();
+    await registry.init();
+    await registry.register(baseServer, { actor: "alice" });
+
+    await registry.deregister(baseServer.id, { actor: "alice" }, "project", "proj-1", async () => ({
+      safe: true,
+      references: [],
+    }));
+
+    expect(await registry.get(baseServer.id, "project", "proj-1")).toBeNull();
+    expect(await registry.queryAudit({ operation: "deregister" })).toHaveLength(1);
+  });
 });

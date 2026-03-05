@@ -298,6 +298,7 @@ export {
   measureMcpPropagationSlo,
 } from "./mcp-propagation.js";
 export type {
+  McpOrphanCheck,
   McpRegistryOperationOptions,
   McpRegistryQuery,
   McpServerRegistry,

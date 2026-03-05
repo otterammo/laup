@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { InMemoryHandoffHistoryStorage } from "../handoff-history.js";
 import { HandoffManager, HandoffTimeoutError } from "../handoff-manager.js";
 import type { ContextPacket } from "../handoff-schema.js";
 
@@ -111,5 +112,36 @@ describe("handoff-manager (HAND-004)", () => {
     expect(result.history.timestamps.sent).toBeDefined();
     expect(result.history.timestamps.acknowledged).toBe("2026-03-05T07:00:10Z");
     expect(result.history.timestamps.completed).toBeDefined();
+  });
+
+  it("writes handoff lifecycle events into HAND-008 storage", async () => {
+    const historyStorage = new InMemoryHandoffHistoryStorage();
+    await historyStorage.init();
+
+    const manager = new HandoffManager({ historyStorage });
+    await manager.send(packet, {
+      sourceAgent: "sender-1",
+      targetAgent: "receiver-1",
+      mode: "sync",
+      waitForAck: async () => ({
+        packetId: packet.packetId,
+        agentId: "receiver-1",
+        status: "accepted",
+        timestamp: "2026-03-05T07:00:10Z",
+      }),
+    });
+
+    const events = await historyStorage.query({ packetId: packet.packetId });
+    expect(events).toHaveLength(3);
+    expect(events.map((event) => event.status).sort()).toEqual([
+      "acknowledged",
+      "received",
+      "sent",
+    ]);
+    expect(events[0]).toMatchObject({
+      packetId: packet.packetId,
+      sendingTool: packet.sendingTool,
+      receivingTool: packet.receivingTool,
+    });
   });
 });

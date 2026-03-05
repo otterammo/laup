@@ -180,6 +180,20 @@ export {
   createMigrator,
   Migrator,
 } from "./db-migrations.js";
+export type {
+  HandoffHistoryQuery,
+  HandoffHistoryRecord,
+  HandoffHistoryStatus,
+  HandoffHistoryStorage,
+  HandoffRecordSentInput,
+  HandoffRecordStatusInput,
+} from "./handoff-history.js";
+export {
+  createHandoffHistoryStorage,
+  InMemoryHandoffHistoryStorage,
+  MIN_HANDOFF_HISTORY_RETENTION_MONTHS,
+  SqlHandoffHistoryStorage,
+} from "./handoff-history.js";
 export type { SendHandoffOptions, SendHandoffResult } from "./handoff-manager.js";
 export {
   HandoffManager,

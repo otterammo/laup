@@ -1,3 +1,4 @@
+import type { HandoffHistoryStorage } from "./handoff-history.js";
 import type {
   ContextPacket,
   HandoffAck,
@@ -36,9 +37,11 @@ export interface SendHandoffResult {
 export class HandoffManager {
   private readonly history: HandoffHistoryEntry[] = [];
   private readonly now: () => Date;
+  private readonly historyStorage: HandoffHistoryStorage | undefined;
 
-  constructor(options?: { now?: () => Date }) {
+  constructor(options?: { now?: () => Date; historyStorage?: HandoffHistoryStorage }) {
     this.now = options?.now ?? (() => new Date());
+    this.historyStorage = options?.historyStorage;
   }
 
   getHistory(): HandoffHistoryEntry[] {
@@ -65,6 +68,13 @@ export class HandoffManager {
 
     historyEntry.status = "sent";
     historyEntry.timestamps.sent = this.now().toISOString();
+    await this.historyStorage?.recordSent({
+      packetId: packet.packetId,
+      sendingTool: packet.sendingTool,
+      receivingTool: packet.receivingTool,
+      taskSummary: summarizeTask(packet.task),
+      sentAt: historyEntry.timestamps.sent,
+    });
 
     if (mode === "async") {
       historyEntry.timestamps.completed = this.now().toISOString();
@@ -83,12 +93,27 @@ export class HandoffManager {
     try {
       const ack = await waitForAckWithTimeout(options.waitForAck, packet.packetId, timeoutSeconds);
       historyEntry.timestamps.acknowledged = ack.timestamp;
+      await this.historyStorage?.recordReceived({
+        packetId: packet.packetId,
+        eventAt: ack.timestamp,
+      });
       historyEntry.timestamps.completed = this.now().toISOString();
       historyEntry.status = ack.status === "accepted" ? "acknowledged" : "rejected";
       historyEntry.durationMs = this.toDurationMs(
         historyEntry.timestamps.created,
         historyEntry.timestamps.completed,
       );
+      if (ack.status === "accepted") {
+        await this.historyStorage?.recordAcknowledged({
+          packetId: packet.packetId,
+          eventAt: ack.timestamp,
+        });
+      } else {
+        await this.historyStorage?.recordRejected({
+          packetId: packet.packetId,
+          eventAt: ack.timestamp,
+        });
+      }
       if (ack.status === "rejected" && ack.reason) {
         historyEntry.error = ack.reason;
       }
@@ -107,6 +132,10 @@ export class HandoffManager {
           historyEntry.timestamps.created,
           historyEntry.timestamps.completed,
         );
+        await this.historyStorage?.recordExpired({
+          packetId: packet.packetId,
+          eventAt: historyEntry.timestamps.completed,
+        });
         this.history.push(historyEntry);
       }
       throw error;
@@ -120,6 +149,25 @@ export class HandoffManager {
     if (Number.isNaN(start) || Number.isNaN(end)) return undefined;
     return Math.max(0, end - start);
   }
+}
+
+function summarizeTask(task: Record<string, unknown>): string {
+  const summaryField = task["summary"];
+  if (typeof summaryField === "string" && summaryField.trim().length > 0) {
+    return summaryField;
+  }
+
+  const titleField = task["title"];
+  if (typeof titleField === "string" && titleField.trim().length > 0) {
+    return titleField;
+  }
+
+  const typeField = task["type"];
+  if (typeof typeField === "string" && typeField.trim().length > 0) {
+    return typeField;
+  }
+
+  return JSON.stringify(task).slice(0, 240);
 }
 
 export async function waitForAckWithTimeout(

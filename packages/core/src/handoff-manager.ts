@@ -1,4 +1,5 @@
 import type { HandoffHistoryStorage } from "./handoff-history.js";
+import type { HandoffQueue, HandoffQueueRecord } from "./handoff-queue.js";
 import type {
   ContextPacket,
   HandoffAck,
@@ -31,6 +32,7 @@ export interface SendHandoffOptions {
 export interface SendHandoffResult {
   status: "sent" | "acknowledged" | "rejected";
   ack?: HandoffAck;
+  queueRecord?: HandoffQueueRecord;
   history: HandoffHistoryEntry;
 }
 
@@ -38,10 +40,16 @@ export class HandoffManager {
   private readonly history: HandoffHistoryEntry[] = [];
   private readonly now: () => Date;
   private readonly historyStorage: HandoffHistoryStorage | undefined;
+  private readonly handoffQueue: HandoffQueue | undefined;
 
-  constructor(options?: { now?: () => Date; historyStorage?: HandoffHistoryStorage }) {
+  constructor(options?: {
+    now?: () => Date;
+    historyStorage?: HandoffHistoryStorage;
+    handoffQueue?: HandoffQueue;
+  }) {
     this.now = options?.now ?? (() => new Date());
     this.historyStorage = options?.historyStorage;
+    this.handoffQueue = options?.handoffQueue;
   }
 
   getHistory(): HandoffHistoryEntry[] {
@@ -77,13 +85,18 @@ export class HandoffManager {
     });
 
     if (mode === "async") {
+      if (!this.handoffQueue) {
+        throw new Error("handoffQueue is required for async handoff mode");
+      }
+
+      const queueRecord = await this.handoffQueue.enqueue(packet);
       historyEntry.timestamps.completed = this.now().toISOString();
       historyEntry.durationMs = this.toDurationMs(
         historyEntry.timestamps.created,
         historyEntry.timestamps.completed,
       );
       this.history.push(historyEntry);
-      return { status: "sent", history: historyEntry };
+      return { status: "sent", queueRecord, history: historyEntry };
     }
 
     if (!options.waitForAck) {

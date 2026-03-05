@@ -288,6 +288,10 @@ export function createMarketplaceApiHandler(
       return json(200, page);
     }
 
+    if (path === `${basePath}/skills/builder`) {
+      return html(200, renderSkillBuilderHtml());
+    }
+
     if (path.startsWith(`${basePath}/skills/`)) {
       const id = decodeURIComponent(path.slice(`${basePath}/skills/`.length));
       if (!id) return json(400, { error: "invalid_id" });
@@ -368,6 +372,148 @@ export function renderMarketplaceHtml(page: MarketplacePage, title = "Skill Mark
   <h1>${escapeHtml(title)}</h1>
   <p>Showing ${page.skills.length} of ${page.total} skills.</p>
   <ul>${cards}</ul>
+</body>
+</html>`;
+}
+
+export function renderSkillBuilderHtml(title = "Visual Skill Builder"): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 960px; padding: 0 1rem; }
+    .grid { display: grid; gap: 0.75rem; }
+    .panel { border: 1px solid #ddd; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
+    label { display: grid; gap: 0.35rem; font-weight: 600; }
+    input, textarea, select, button { font: inherit; }
+    input, textarea, select { padding: 0.55rem; border-radius: 8px; border: 1px solid #ccc; }
+    textarea { min-height: 7rem; }
+    button { cursor: pointer; padding: 0.55rem 0.8rem; border-radius: 8px; border: 1px solid #888; background: #f7f7f7; }
+    .row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: end; }
+    pre { white-space: pre-wrap; background: #111; color: #f3f3f3; padding: 1rem; border-radius: 10px; overflow: auto; }
+    .help { color: #555; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(title)}</h1>
+  <p class="help">Build a portable skill with a form (no YAML/JSON editing required), preview the generated schema, and test prompt rendering before publishing.</p>
+
+  <section class="panel grid">
+    <h2>Skill details</h2>
+    <label>Skill name<input id="skillName" placeholder="acme/review" /></label>
+    <label>Description<input id="skillDescription" placeholder="Reviews a pull request" /></label>
+    <label>Version<input id="skillVersion" value="1.0.0" /></label>
+    <label>Prompt body<textarea id="skillPrompt" placeholder="Review {{repo}} pull request #{{prNumber}}"></textarea></label>
+  </section>
+
+  <section class="panel grid">
+    <h2>Parameters</h2>
+    <div id="params" class="grid"></div>
+    <button id="addParam" type="button">Add parameter</button>
+  </section>
+
+  <section class="panel grid">
+    <h2>Preview & test</h2>
+    <label>Test inputs (JSON object)<textarea id="testInput" placeholder='{"repo": "otterammo/laup", "prNumber": 38}'></textarea></label>
+    <div>
+      <button id="refresh" type="button">Generate preview</button>
+    </div>
+    <h3>Generated portable skill schema</h3>
+    <pre id="schemaPreview"></pre>
+    <h3>Rendered prompt preview</h3>
+    <pre id="promptPreview"></pre>
+  </section>
+
+  <script>
+    const paramsRoot = document.getElementById("params");
+    const schemaPreview = document.getElementById("schemaPreview");
+    const promptPreview = document.getElementById("promptPreview");
+
+    function addParamRow(initial = { name: "", description: "", type: "string", required: true, default: "" }) {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = "<label>Name<input data-field="name" value="" + initial.name + "" /></label>"
+        + "<label>Description<input data-field="description" value="" + initial.description + "" /></label>"
+        + "<button type="button" data-remove="true">Remove</button>"
+        + "<label>Type<select data-field="type">"
+        + "<option value="string">string</option><option value="number">number</option>"
+        + "<option value="boolean">boolean</option><option value="array">array</option>"
+        + "<option value="object">object</option><option value="file">file</option>"
+        + "<option value="selection">selection</option></select></label>"
+        + "<label>Required<select data-field="required"><option value="true">true</option><option value="false">false</option></select></label>"
+        + "<label>Default<input data-field="default" value="" + initial.default + "" /></label>";
+      paramsRoot.appendChild(row);
+      row.querySelector('[data-field="type"]').value = initial.type;
+      row.querySelector('[data-field="required"]').value = String(initial.required);
+      row.querySelector('[data-remove="true"]').addEventListener("click", () => {
+        row.remove();
+        refresh();
+      });
+      row.querySelectorAll("input,select").forEach((el) => el.addEventListener("input", refresh));
+    }
+
+    function readSkillFromForm() {
+      const parameters = Array.from(paramsRoot.children).map((row) => {
+        const get = (field) => row.querySelector('[data-field="' + field + '"]').value.trim();
+        const name = get("name");
+        if (!name) return null;
+        const param = {
+          name,
+          description: get("description") || undefined,
+          type: get("type"),
+          required: get("required") === "true",
+        };
+        const defaultValue = get("default");
+        if (defaultValue) param.default = defaultValue;
+        return param;
+      }).filter(Boolean);
+
+      return {
+        schemaVersion: "1.0",
+        name: document.getElementById("skillName").value.trim(),
+        version: document.getElementById("skillVersion").value.trim() || "1.0.0",
+        description: document.getElementById("skillDescription").value.trim(),
+        parameters,
+        prompt: document.getElementById("skillPrompt").value,
+      };
+    }
+
+    function renderPrompt(skill, values) {
+      let prompt = skill.prompt;
+      for (const param of skill.parameters) {
+        const resolved = values[param.name] ?? param.default;
+        if (param.required && (resolved === undefined || resolved === null || resolved === "")) {
+          throw new Error("Missing required parameter: " + param.name);
+        }
+        if (resolved !== undefined) {
+          prompt = prompt.split("{{" + param.name + "}}").join(String(resolved));
+        }
+      }
+      return prompt;
+    }
+
+    function refresh() {
+      const skill = readSkillFromForm();
+      schemaPreview.textContent = JSON.stringify(skill, null, 2);
+      try {
+        const values = JSON.parse(document.getElementById("testInput").value || "{}");
+        promptPreview.textContent = renderPrompt(skill, values);
+      } catch (error) {
+        promptPreview.textContent = "Preview error: " + error.message;
+      }
+    }
+
+    document.getElementById("addParam").addEventListener("click", () => { addParamRow(); refresh(); });
+    document.getElementById("refresh").addEventListener("click", refresh);
+    document.querySelectorAll("input,textarea").forEach((el) => el.addEventListener("input", refresh));
+
+    addParamRow({ name: "repo", description: "Repository", type: "string", required: true, default: "" });
+    addParamRow({ name: "prNumber", description: "Pull request number", type: "number", required: true, default: "" });
+    refresh();
+  </script>
 </body>
 </html>`;
 }

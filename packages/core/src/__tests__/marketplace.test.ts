@@ -6,6 +6,7 @@ import {
   type MarketplaceSkill,
   renderMarketplaceAuthorAnalyticsPage,
   renderMarketplacePage,
+  renderSkillBuilderHtml,
 } from "../marketplace.js";
 
 const sampleSkills: MarketplaceSkill[] = [
@@ -191,6 +192,24 @@ describe("marketplace", () => {
       expect(payload.id).toBe("acme/weather");
     });
 
+    it("returns visual skill builder UI", async () => {
+      const marketplace = makeMarketplace();
+      const handler = createMarketplaceApiHandler({ marketplace });
+
+      const response = await handler({
+        method: "GET",
+        path: "/api/marketplace/skills/builder",
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers["content-type"]).toContain("text/html");
+      expect(response.body).toContain("Visual Skill Builder");
+      expect(response.body).toContain("Skill name");
+      expect(response.body).toContain("Prompt body");
+      expect(response.body).toContain("Generated portable skill schema");
+      expect(response.body).toContain("Rendered prompt preview");
+    });
+
     it("returns author analytics via API and dashboard", async () => {
       const marketplace = makeMarketplace();
       const analytics = new InMemoryMarketplaceSkillAnalytics(
@@ -273,6 +292,18 @@ describe("marketplace", () => {
       expect(html).toContain("Skill Analytics · acme");
       expect(html).toContain("Installation counts");
       expect(html).toContain("Per version");
+    });
+
+    it("renders visual skill builder page", () => {
+      const html = renderSkillBuilderHtml();
+
+      expect(html).toContain("Visual Skill Builder");
+      expect(html).toContain("Build a portable skill with a form");
+      expect(html).toContain('id="skillName"');
+      expect(html).toContain('id="skillDescription"');
+      expect(html).toContain('id="skillPrompt"');
+      expect(html).toContain('id="schemaPreview"');
+      expect(html).toContain('id="promptPreview"');
     });
   });
 });

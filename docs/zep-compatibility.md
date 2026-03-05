@@ -1,4 +1,4 @@
-# Zep Compatibility Layer (MEM-006)
+# Zep Compatibility Layer (MEM-006, MEM-007)
 
 LAUP provides a Zep-style integration facade in `packages/core/src/memory-zep.ts`.
 
@@ -8,6 +8,7 @@ LAUP provides a Zep-style integration facade in `packages/core/src/memory-zep.ts
 - `add_memory(...)`
 - `search_memory(...)`
 - `get_memory(...)`
+- `extract_memory(...)` for automatic memory extraction from full session transcripts
 
 ## Usage
 
@@ -38,6 +39,12 @@ await session.add_memory("User likes concise release notes", {
 const results = await session.search_memory("release notes", { limit: 5 });
 
 const one = await session.get_memory(results[0]?.uuid);
+
+await session.extract_memory([
+  { role: "assistant", content: "Let's capture preferences from this chat." },
+  { role: "user", content: "Remember that I prefer concise summaries." },
+  { role: "user", content: "I'm allergic to peanuts." },
+]);
 ```
 
 ## Context mapping

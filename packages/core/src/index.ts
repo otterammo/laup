@@ -329,6 +329,7 @@ export type {
   ZepAddMemoryParams,
   ZepCompatibleMemoryClient,
   ZepContextResolver,
+  ZepExtractMemoryParams,
   ZepGetMemoryParams,
   ZepMemory,
   ZepMessage,

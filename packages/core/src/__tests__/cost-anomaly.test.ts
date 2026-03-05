@@ -59,6 +59,53 @@ describe("CostAnomalyDetector", () => {
     expect(auditPage.entries[0]?.targetType).toBe("cost-anomaly");
   });
 
+  it("uses default 5x threshold + 1 hour window and records PERM-017 channel metadata", async () => {
+    const usageStorage = new InMemoryUsageStorage();
+    await usageStorage.init();
+
+    const auditStorage = new InMemoryAuditStorage();
+    await auditStorage.init();
+
+    for (let hour = 24; hour >= 1; hour -= 1) {
+      const timestamp = new Date(Date.parse("2026-03-03T18:00:00.000Z") - hour * 60 * 60_000);
+      await store(usageStorage, timestamp.toISOString(), {
+        developerId: "dev-defaults",
+        projectId: "proj-defaults",
+        inputTokens: 50,
+        outputTokens: 50,
+      });
+    }
+
+    await store(usageStorage, "2026-03-03T17:50:00.000Z", {
+      developerId: "dev-defaults",
+      projectId: "proj-defaults",
+      inputTokens: 250,
+      outputTokens: 250,
+    });
+
+    const detector = new CostAnomalyDetector({
+      usageStorage,
+      auditStorage,
+      dimensions: ["developerId"],
+      now: () => new Date(),
+    });
+
+    const report = await detector.detect();
+
+    expect(report.thresholdMultiplier).toBe(5);
+    expect(report.detectionWindowMs).toBe(60 * 60_000);
+    expect(report.anomalies).toHaveLength(1);
+    expect(report.anomalies[0]?.ratio).toBeGreaterThanOrEqual(5);
+
+    const auditPage = await auditStorage.query({ action: "cost.anomaly.detected" }, 10, 0);
+    expect(auditPage.total).toBe(1);
+    expect(auditPage.entries[0]?.metadata).toMatchObject({
+      channels: ["email"],
+      dimension: "developerId",
+      subject: "dev-defaults",
+    });
+  });
+
   it("supports configurable threshold, detection window, and notification channels", async () => {
     const usageStorage = new InMemoryUsageStorage();
     await usageStorage.init();

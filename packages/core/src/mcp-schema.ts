@@ -316,6 +316,7 @@ export const McpAuditOperationSchema = z.enum([
   "deregister",
   "enable",
   "disable",
+  "credential-rotate",
   "health-change",
 ]);
 
@@ -333,6 +334,12 @@ export const McpAuditEntrySchema = z.object({
 
   /** Operation type */
   operation: McpAuditOperationSchema,
+
+  /** Scope level */
+  scope: McpScopeSchema,
+
+  /** Scope identifier */
+  scopeId: z.string().optional(),
 
   /** User/agent that performed the operation */
   actor: z.string(),

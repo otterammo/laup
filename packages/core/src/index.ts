@@ -298,6 +298,12 @@ export {
   measureMcpPropagationSlo,
 } from "./mcp-propagation.js";
 export type {
+  McpRegistryOperationOptions,
+  McpRegistryQuery,
+  McpServerRegistry,
+} from "./mcp-registry.js";
+export { InMemoryMcpServerRegistry } from "./mcp-registry.js";
+export type {
   McpAuditEntry,
   McpAuditOperation,
   McpCredentialRef,

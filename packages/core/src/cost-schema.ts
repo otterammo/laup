@@ -390,6 +390,84 @@ export const CostSummarySchema = z.object({
 export type CostSummary = z.infer<typeof CostSummarySchema>;
 
 /**
+ * Cost summary export format (COST-007).
+ */
+export type CostExportFormat = "json" | "csv";
+
+export interface CostExportOptions {
+  format: CostExportFormat;
+  pretty?: boolean;
+  includeHeaders?: boolean;
+}
+
+function escapeCsvValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const str = String(value);
+  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function toCostExportRows(summary: CostSummary): Array<Record<string, unknown>> {
+  const rows: Array<Record<string, unknown>> = [
+    {
+      periodStart: summary.periodStart,
+      periodEnd: summary.periodEnd,
+      currency: summary.currency,
+      dimension: "total",
+      key: "totalCost",
+      cost: summary.totalCost,
+    },
+  ];
+
+  const pushBreakdown = (dimension: string, breakdown?: Record<string, number>) => {
+    if (!breakdown) return;
+    for (const [key, cost] of Object.entries(breakdown)) {
+      rows.push({
+        periodStart: summary.periodStart,
+        periodEnd: summary.periodEnd,
+        currency: summary.currency,
+        dimension,
+        key,
+        cost,
+      });
+    }
+  };
+
+  pushBreakdown("byType", summary.byType);
+  pushBreakdown("byProvider", summary.byProvider);
+  pushBreakdown("byModel", summary.byModel);
+  pushBreakdown("bySkill", summary.bySkill);
+
+  return rows;
+}
+
+/**
+ * Export a cost summary as JSON or CSV (COST-007).
+ */
+export function exportCostSummary(summary: CostSummary, options: CostExportOptions): string {
+  const rows = toCostExportRows(summary);
+
+  if (options.format === "json") {
+    return options.pretty ? JSON.stringify(rows, null, 2) : JSON.stringify(rows);
+  }
+
+  const fields = ["periodStart", "periodEnd", "currency", "dimension", "key", "cost"];
+  const lines: string[] = [];
+
+  if (options.includeHeaders !== false) {
+    lines.push(fields.join(","));
+  }
+
+  for (const row of rows) {
+    lines.push(fields.map((field) => escapeCsvValue(row[field])).join(","));
+  }
+
+  return lines.join("\n");
+}
+
+/**
  * Calculate cost for an LLM usage event.
  */
 export function calculateLlmCost(usage: LlmUsage, pricing: ModelPricing): number {

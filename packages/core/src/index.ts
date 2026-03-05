@@ -403,6 +403,13 @@ export {
   McpCapabilityManifestSchema,
 } from "./mcp-capability-discovery.js";
 export type {
+  FederatedMcpMarketplacePage,
+  FederatedMcpServerView,
+  McpFederationOrganizationConfig,
+  McpFederationQuery,
+} from "./mcp-federation.js";
+export { InMemoryMcpFederationService } from "./mcp-federation.js";
+export type {
   McpPropagationOptions,
   McpPropagationReport,
   McpPropagationTarget,

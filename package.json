@@ -10,6 +10,7 @@
     "lint": "pnpm run lint:md && pnpm run lint:machine",
     "lint:fix": "pnpm run lint:md:fix && pnpm run lint:yaml:fix && pnpm run lint:biome:fix && pnpm run lint",
     "typecheck": "pnpm -r run typecheck",
+    "verify:local": "node scripts/verify-local.mjs",
     "clean": "pnpm -r run clean && rm -rf node_modules",
     "prepare": "husky",
     "lint:biome": "biome check .",
@@ -20,7 +21,8 @@
     "lint:yaml": "node scripts/lint-yaml.mjs",
     "lint:yaml:fix": "node scripts/lint-yaml.mjs --fix",
     "lint:machine": "pnpm run lint:yaml && pnpm run lint:frontmatter && pnpm run lint:biome",
-    "tutorial": "scripts/tutorial.sh"
+    "tutorial": "scripts/tutorial.sh",
+    "quality:baseline": "node scripts/quality-baseline.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
@@ -31,6 +33,7 @@
     "markdownlint-cli2": "^0.21.0",
     "typescript": "^5.7.3",
     "vitest": "^4.0.18",
+    "@vitest/coverage-v8": "^4.0.18",
     "yaml": "^2.8.2"
   },
   "lint-staged": {

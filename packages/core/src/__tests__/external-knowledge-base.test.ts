@@ -150,9 +150,7 @@ describe("external knowledge sync service", () => {
     const annotated = annotateExternalKnowledgeResults(results);
     expect(annotated[0]?.external).toBe(true);
 
-    const listed = await listMemoryIncludingExternalSources(memoryStore, "org", CONTEXT, {
-      limit: 10,
-    });
+    const listed = await listMemoryIncludingExternalSources(memoryStore, "org", CONTEXT);
     expect(listed[0]?.external).toBe(true);
   });
 

@@ -4,6 +4,7 @@ import type {
   McpCredentialRef,
   McpScope,
   McpServer,
+  OrphanCheckResult,
 } from "./mcp-schema.js";
 import { validateMcpServer } from "./mcp-schema.js";
 
@@ -21,6 +22,10 @@ export interface McpRegistryQuery {
   endTime?: string;
 }
 
+export type McpOrphanCheck =
+  | ((server: McpServer) => OrphanCheckResult | Promise<OrphanCheckResult>)
+  | undefined;
+
 export interface McpServerRegistry {
   init(): Promise<void>;
   register(server: McpServer, options: McpRegistryOperationOptions): Promise<void>;
@@ -30,6 +35,7 @@ export interface McpServerRegistry {
     options: McpRegistryOperationOptions,
     scope?: McpScope,
     scopeId?: string,
+    orphanCheck?: McpOrphanCheck,
   ): Promise<void>;
   enable(
     serverId: string,
@@ -130,10 +136,19 @@ export class InMemoryMcpServerRegistry implements McpServerRegistry {
     options: McpRegistryOperationOptions,
     scope?: McpScope,
     scopeId?: string,
+    orphanCheck?: McpOrphanCheck,
   ): Promise<void> {
     const key = registryKey(serverId, scope, scopeId);
     const previous = this.servers.get(key);
     if (!previous) return;
+
+    if (orphanCheck) {
+      const result = await orphanCheck(deepClone(previous));
+      if (!result.safe) {
+        const refs = result.references.map((ref) => `${ref.type}:${ref.id}`).join(", ");
+        throw new Error(`Cannot deregister MCP server ${serverId}; orphaned references: ${refs}`);
+      }
+    }
 
     this.servers.delete(key);
     this.recordAudit({

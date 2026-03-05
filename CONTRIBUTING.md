@@ -107,6 +107,24 @@ pnpm run lint:frontmatter  # Markdown/MDC frontmatter checks
 pnpm run verify:local      # Changed-scope local verification gate
 ```
 
+### PR blocking required checks (CIG-001)
+
+`main` branch protection requires the following named status checks, and names must match CI job names exactly:
+
+- `quality/lint`
+- `quality/typecheck`
+- `quality/test`
+- `quality/coverage`
+- `quality/security`
+- `quality/workflow-lint`
+
+Branch protection source of truth is `.github/branch-protection.main.json`.
+Maintainers can apply it with:
+
+```bash
+scripts/apply-branch-protection.sh otterammo/laup main
+```
+
 Linting is blocking in CI and pre-commit. `lint-staged` runs on changed files:
 
 - `*.{ts,tsx,js,jsx,json}`: Biome write/check

@@ -1,4 +1,4 @@
-name: CI
+name: quality
 
 on:
   push:
@@ -14,30 +14,85 @@ permissions:
   contents: read
 
 jobs:
-  quality:
-    name: Lint, typecheck & test
+  lint:
+    name: quality/lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "pnpm"
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Lint (Markdown + Machine-readable + Biome)
+      - name: Run lint
         run: pnpm run lint
 
-      - name: Build packages
-        run: pnpm run build
-
-      - name: Typecheck
+  typecheck:
+    name: quality/typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run typecheck
         run: pnpm run typecheck
 
-      - name: Test
+  test:
+    name: quality/test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run tests
         run: pnpm run test:run
+
+  coverage:
+    name: quality/coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run coverage
+        run: pnpm run test:run --coverage
+
+  security:
+    name: quality/security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Dependency vulnerability scan
+        run: pnpm audit --audit-level=high
+
+  workflow_lint:
+    name: quality/workflow-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Lint GitHub Actions workflows
+        uses: rhysd/actionlint@v1

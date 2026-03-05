@@ -252,6 +252,29 @@ export interface SecurityValidationResult {
   }>;
 }
 
+export interface IncomingPacketPolicy {
+  registeredTools: string[];
+  requiredConstraints?: string[];
+  deniedConstraints?: string[];
+  allowedPermissions?: string[];
+  deniedPermissions?: string[];
+  promptInjectionPatterns?: RegExp[];
+}
+
+export interface IncomingPacketValidationResult {
+  valid: boolean;
+  packet?: ContextPacket;
+  reasons: string[];
+}
+
+const DEFAULT_PROMPT_INJECTION_PATTERNS: RegExp[] = [
+  /ignore\s+(all\s+)?previous\s+instructions/i,
+  /disregard\s+(the\s+)?(system|developer)\s+prompt/i,
+  /reveal\s+(your\s+)?(system|hidden)\s+prompt/i,
+  /bypass\s+(safety|security|policy)/i,
+  /you\s+are\s+now\s+(in\s+)?developer\s+mode/i,
+];
+
 /**
  * Validate a context packet for security (HAND-006).
  */
@@ -295,6 +318,102 @@ export function validatePacketSecurity(packet: ContextPacket): SecurityValidatio
     valid: issues.filter((i) => i.severity === "error").length === 0,
     issues,
   };
+}
+
+/**
+ * Validate incoming packet before deserialization/restoration (HAND-006).
+ */
+export function validateIncomingContextPacket(
+  candidate: unknown,
+  policy: IncomingPacketPolicy,
+  logRejection?: (entry: { packetId?: string; sendingTool?: string; reasons: string[] }) => void,
+): IncomingPacketValidationResult {
+  const reasons: string[] = [];
+  const parsed = ContextPacketSchema.safeParse(candidate);
+
+  if (!parsed.success) {
+    reasons.push("Schema validation failed");
+    logRejection?.({ reasons });
+    return { valid: false, reasons };
+  }
+
+  const packet = parsed.data;
+
+  if (!policy.registeredTools.includes(packet.sendingTool)) {
+    reasons.push(`Untrusted packet source: ${packet.sendingTool}`);
+  }
+
+  if (policy.requiredConstraints) {
+    for (const required of policy.requiredConstraints) {
+      if (!packet.constraints.includes(required)) {
+        reasons.push(`Missing required constraint: ${required}`);
+      }
+    }
+  }
+
+  if (policy.deniedConstraints) {
+    for (const denied of policy.deniedConstraints) {
+      if (packet.constraints.includes(denied)) {
+        reasons.push(`Denied constraint present: ${denied}`);
+      }
+    }
+  }
+
+  const permissionAllow = readStringList(packet.permissionPolicy, "allow");
+  const permissionDeny = readStringList(packet.permissionPolicy, "deny");
+
+  if (policy.allowedPermissions) {
+    for (const requestedPermission of permissionAllow) {
+      if (!policy.allowedPermissions.includes(requestedPermission)) {
+        reasons.push(`Permission not allowed by active policy: ${requestedPermission}`);
+      }
+    }
+  }
+
+  if (policy.deniedPermissions) {
+    for (const deniedPermission of policy.deniedPermissions) {
+      if (
+        permissionAllow.includes(deniedPermission) &&
+        !permissionDeny.includes(deniedPermission)
+      ) {
+        reasons.push(`Denied permission requested: ${deniedPermission}`);
+      }
+    }
+  }
+
+  const injectionPatterns = policy.promptInjectionPatterns ?? DEFAULT_PROMPT_INJECTION_PATTERNS;
+  const hasInjection = collectStrings(packet).some((value) =>
+    injectionPatterns.some((pattern) => pattern.test(value)),
+  );
+  if (hasInjection) {
+    reasons.push("Prompt injection pattern detected");
+  }
+
+  if (reasons.length > 0) {
+    logRejection?.({
+      packetId: packet.packetId,
+      sendingTool: packet.sendingTool,
+      reasons,
+    });
+    return { valid: false, reasons };
+  }
+
+  return { valid: true, packet, reasons };
+}
+
+function readStringList(obj: Record<string, unknown>, key: string): string[] {
+  const value = obj[key];
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+function collectStrings(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(collectStrings);
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).flatMap(collectStrings);
+  }
+  return [];
 }
 
 /**

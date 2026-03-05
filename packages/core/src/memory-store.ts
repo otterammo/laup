@@ -29,6 +29,8 @@ export interface MemoryRecord {
   createdAt: string;
   expiresAt?: string;
   metadata?: Record<string, unknown>;
+  tags?: string[];
+  category?: string;
   sourceToolId?: string;
   embedding?: number[];
   embeddingModel?: string;
@@ -41,6 +43,8 @@ export interface MemoryWriteInput {
   scope: MemoryScope;
   context: MemoryContext;
   metadata?: Record<string, unknown>;
+  tags?: string[];
+  category?: string;
   sourceToolId?: string;
   embeddingModel?: string;
   now?: Date;
@@ -72,10 +76,16 @@ export interface MemoryConflictListOptions {
 
 export type MemoryConflictResolutionAction = "accept-incoming" | "keep-existing";
 
+export interface MemoryRetrievalFilter {
+  tags?: string[];
+  categories?: string[];
+}
+
 export interface MemoryReadOptions {
   includeSharedFromBroaderScopes?: boolean;
   requestingToolId?: string;
   now?: Date;
+  filter?: MemoryRetrievalFilter;
 }
 
 export interface MemorySearchOptions {
@@ -83,6 +93,7 @@ export interface MemorySearchOptions {
   now?: Date;
   k?: number;
   embeddingModel?: string;
+  filter?: MemoryRetrievalFilter;
 }
 
 export interface MemorySearchResult {
@@ -158,6 +169,37 @@ function buildScopeContext(
 
 function isExpired(record: MemoryRecord, now: Date): boolean {
   return Boolean(record.expiresAt && new Date(record.expiresAt).getTime() <= now.getTime());
+}
+
+function normalizeTags(tags?: string[]): string[] | undefined {
+  if (!tags) return undefined;
+  const normalized = Array.from(
+    new Set(tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean)),
+  );
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeCategory(category?: string): string | undefined {
+  const normalized = category?.trim().toLowerCase();
+  return normalized ? normalized : undefined;
+}
+
+function matchesFilter(record: MemoryRecord, filter?: MemoryRetrievalFilter): boolean {
+  if (!filter) return true;
+
+  const recordTags = new Set(record.tags ?? []);
+  const requiredTags = normalizeTags(filter.tags) ?? [];
+  if (requiredTags.some((tag) => !recordTags.has(tag))) {
+    return false;
+  }
+
+  const categories = normalizeTags(filter.categories);
+  if (categories && categories.length > 0) {
+    const recordCategory = normalizeCategory(record.category);
+    if (!recordCategory || !categories.includes(recordCategory)) return false;
+  }
+
+  return true;
 }
 
 function canRead(
@@ -377,6 +419,8 @@ export class InMemoryMemoryStore implements MemoryStore {
 
     const embeddingModel = input.embeddingModel ?? this.defaultEmbeddingModel;
     const embedding = await this.embeddingProvider.embed(input.content, { model: embeddingModel });
+    const tags = normalizeTags(input.tags ?? existing?.tags);
+    const category = normalizeCategory(input.category ?? existing?.category);
 
     const record: MemoryRecord = {
       id,
@@ -389,6 +433,8 @@ export class InMemoryMemoryStore implements MemoryStore {
       ...scopeContext,
       ...(expiresAt ? { expiresAt } : {}),
       ...(input.metadata ? { metadata: input.metadata } : {}),
+      ...(tags ? { tags } : {}),
+      ...(category ? { category } : {}),
       sourceToolId,
     };
 
@@ -409,6 +455,8 @@ export class InMemoryMemoryStore implements MemoryStore {
         projectId: scopeContext.projectId,
         sessionId: scopeContext.sessionId,
         key: nextKey,
+        tags,
+        category,
         sourceToolId,
       },
     });
@@ -430,10 +478,12 @@ export class InMemoryMemoryStore implements MemoryStore {
     const now = options?.now ?? new Date();
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
     const requestingToolId = options?.requestingToolId;
+    const filter = options?.filter;
 
     const records = Array.from(this.records.values())
       .filter((record) => !isExpired(record, now))
       .filter((record) => canRead(record, scope, context, includeShared))
+      .filter((record) => matchesFilter(record, filter))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
     await this.auditLogger.record({
@@ -445,6 +495,7 @@ export class InMemoryMemoryStore implements MemoryStore {
         sessionId: context.sessionId,
         includeSharedFromBroaderScopes: includeShared,
         requestingToolId,
+        filter,
         resultCount: records.length,
       },
     });
@@ -656,11 +707,13 @@ export class InMemoryMemoryStore implements MemoryStore {
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
     const k = Math.max(1, options?.k ?? this.defaultTopK);
     const model = options?.embeddingModel ?? this.defaultEmbeddingModel;
+    const filter = options?.filter;
     const queryEmbedding = await this.embeddingProvider.embed(query, { model });
 
     return Array.from(this.records.values())
       .filter((record) => !isExpired(record, now))
       .filter((record) => canRead(record, scope, context, includeShared))
+      .filter((record) => matchesFilter(record, filter))
       .map((memory) => ({
         memory,
         score: cosineSimilarity(queryEmbedding, memory.embedding ?? []),
@@ -702,6 +755,8 @@ interface MemoryRow {
   project_id: string | null;
   session_id: string | null;
   metadata: string | null;
+  tags: string | null;
+  category: string | null;
   source_tool_id: string | null;
   embedding: string | null;
   embedding_model: string | null;
@@ -742,6 +797,8 @@ export class SqlMemoryStore implements MemoryStore {
         project_id TEXT,
         session_id TEXT,
         metadata TEXT,
+        tags TEXT,
+        category TEXT,
         source_tool_id TEXT,
         embedding TEXT,
         embedding_model TEXT,
@@ -766,6 +823,9 @@ export class SqlMemoryStore implements MemoryStore {
     await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_memories_expires_at ON memories(expires_at)`,
     );
+
+    await this.ensureOptionalColumn("memories", "tags", "TEXT");
+    await this.ensureOptionalColumn("memories", "category", "TEXT");
 
     await this.db.execute(`
       CREATE TABLE IF NOT EXISTS memory_conflicts (
@@ -798,7 +858,9 @@ export class SqlMemoryStore implements MemoryStore {
       scope: string;
       created_at: string;
       key: string | null;
-    }>(`SELECT scope, created_at, key FROM memories WHERE id = ?`, [id]);
+      tags: string | null;
+      category: string | null;
+    }>(`SELECT scope, created_at, key, tags, category FROM memories WHERE id = ?`, [id]);
 
     if (existing && existing.scope !== input.scope) {
       throw new Error(`Memory scope is immutable for id ${id}`);
@@ -868,10 +930,14 @@ export class SqlMemoryStore implements MemoryStore {
 
     const embeddingModel = input.embeddingModel ?? this.defaultEmbeddingModel;
     const embedding = await this.embeddingProvider.embed(input.content, { model: embeddingModel });
+    const existingTags =
+      typeof existing?.tags === "string" ? (JSON.parse(existing.tags) as string[]) : undefined;
+    const tags = normalizeTags(input.tags ?? existingTags);
+    const category = normalizeCategory(input.category ?? existing?.category ?? undefined);
 
     await this.db.execute(
-      `INSERT OR REPLACE INTO memories (id, key, content, scope, org_id, project_id, session_id, metadata, source_tool_id, embedding, embedding_model, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO memories (id, key, content, scope, org_id, project_id, session_id, metadata, tags, category, source_tool_id, embedding, embedding_model, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         key,
@@ -881,6 +947,8 @@ export class SqlMemoryStore implements MemoryStore {
         scopeContext.projectId ?? null,
         scopeContext.sessionId ?? null,
         input.metadata ? JSON.stringify(input.metadata) : null,
+        tags ? JSON.stringify(tags) : null,
+        category ?? null,
         sourceToolId,
         JSON.stringify(embedding),
         embeddingModel,
@@ -900,6 +968,8 @@ export class SqlMemoryStore implements MemoryStore {
       createdAt,
       ...(expiresAt ? { expiresAt } : {}),
       ...(input.metadata ? { metadata: input.metadata } : {}),
+      ...(tags ? { tags } : {}),
+      ...(category ? { category } : {}),
       sourceToolId,
       embedding,
       embeddingModel,
@@ -914,6 +984,8 @@ export class SqlMemoryStore implements MemoryStore {
         projectId: scopeContext.projectId,
         sessionId: scopeContext.sessionId,
         key,
+        tags,
+        category,
         sourceToolId,
       },
     });
@@ -935,6 +1007,7 @@ export class SqlMemoryStore implements MemoryStore {
     const now = (options?.now ?? new Date()).toISOString();
     const includeShared = options?.includeSharedFromBroaderScopes ?? false;
     const requestingToolId = options?.requestingToolId;
+    const filter = options?.filter;
 
     const allowedScopes: MemoryScope[] = includeShared
       ? scope === "session"
@@ -948,7 +1021,7 @@ export class SqlMemoryStore implements MemoryStore {
     const params: (string | null)[] = [context.orgId, ...allowedScopes, now];
 
     let query = `
-      SELECT id, key, content, scope, org_id, project_id, session_id, metadata, source_tool_id, embedding, embedding_model, created_at, expires_at
+      SELECT id, key, content, scope, org_id, project_id, session_id, metadata, tags, category, source_tool_id, embedding, embedding_model, created_at, expires_at
       FROM memories
       WHERE org_id = ?
         AND scope IN (${placeholders})
@@ -968,7 +1041,8 @@ export class SqlMemoryStore implements MemoryStore {
     const result = await this.db.query<MemoryRow>(query, params);
     const records = result.rows
       .map((row) => this.rowToRecord(row))
-      .filter((record) => canRead(record, scope, context, includeShared));
+      .filter((record) => canRead(record, scope, context, includeShared))
+      .filter((record) => matchesFilter(record, filter));
 
     await this.auditLogger.record({
       action: "memory.listByScope",
@@ -979,6 +1053,7 @@ export class SqlMemoryStore implements MemoryStore {
         sessionId: context.sessionId,
         includeSharedFromBroaderScopes: includeShared,
         requestingToolId,
+        filter,
         resultCount: records.length,
       },
     });
@@ -996,7 +1071,7 @@ export class SqlMemoryStore implements MemoryStore {
     const requestingToolId = options?.requestingToolId;
 
     const row = await this.db.queryOne<MemoryRow>(
-      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, source_tool_id, embedding, embedding_model, created_at, expires_at
+      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, tags, category, source_tool_id, embedding, embedding_model, created_at, expires_at
        FROM memories
        WHERE id = ?`,
       [id],
@@ -1058,7 +1133,7 @@ export class SqlMemoryStore implements MemoryStore {
     const requestingToolId = options?.requestingToolId;
 
     const row = await this.db.queryOne<MemoryRow>(
-      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, source_tool_id, embedding, embedding_model, created_at, expires_at
+      `SELECT id, key, content, scope, org_id, project_id, session_id, metadata, tags, category, source_tool_id, embedding, embedding_model, created_at, expires_at
        FROM memories
        WHERE org_id = ?
          AND key = ?
@@ -1275,6 +1350,18 @@ export class SqlMemoryStore implements MemoryStore {
     return removed;
   }
 
+  private async ensureOptionalColumn(
+    table: string,
+    column: string,
+    columnType: string,
+  ): Promise<void> {
+    try {
+      await this.db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${columnType}`);
+    } catch {
+      // Column likely already exists.
+    }
+  }
+
   private rowToRecord(row: MemoryRow): MemoryRecord {
     const metadataRaw = row.metadata;
     const metadata =
@@ -1284,6 +1371,8 @@ export class SqlMemoryStore implements MemoryStore {
 
     const embedding =
       typeof row.embedding === "string" ? (JSON.parse(row.embedding) as number[]) : undefined;
+    const tags = typeof row.tags === "string" ? (JSON.parse(row.tags) as string[]) : undefined;
+    const category = normalizeCategory(row.category ?? undefined);
 
     return {
       id: String(row.id),
@@ -1296,6 +1385,8 @@ export class SqlMemoryStore implements MemoryStore {
       createdAt: String(row.created_at),
       ...(row.expires_at ? { expiresAt: String(row.expires_at) } : {}),
       ...(metadata ? { metadata } : {}),
+      ...(tags ? { tags } : {}),
+      ...(category ? { category } : {}),
       sourceToolId: row.source_tool_id ? String(row.source_tool_id) : "unknown",
       ...(embedding ? { embedding } : {}),
       ...(row.embedding_model ? { embeddingModel: String(row.embedding_model) } : {}),

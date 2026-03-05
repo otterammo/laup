@@ -310,6 +310,7 @@ export type {
   MemoryEmbeddingProvider,
   MemoryReadOptions,
   MemoryRecord,
+  MemoryRetrievalFilter,
   MemoryScope,
   MemorySearchOptions,
   MemorySearchResult,

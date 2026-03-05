@@ -94,6 +94,7 @@ export interface MemorySearchOptions {
   now?: Date;
   k?: number;
   embeddingModel?: string;
+  relevanceHalfLifeDays?: number;
   filter?: MemoryRetrievalFilter;
 }
 
@@ -174,6 +175,7 @@ export interface MemoryStore {
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_TOP_K = 10;
 const DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small";
+const DEFAULT_RELEVANCE_HALF_LIFE_DAYS = 30;
 const DEFAULT_AUDIT_ACTOR = "system:memory-store";
 
 function randomId(): string {
@@ -351,6 +353,10 @@ export interface MemoryStoreRuntimeOptions {
   embeddingProvider?: MemoryEmbeddingProvider;
   defaultEmbeddingModel?: string;
   defaultTopK?: number;
+  /**
+   * Relevance half-life in days for semantic search decay. Lower values increase decay speed.
+   */
+  relevanceHalfLifeDays?: number;
   conflictResolutionStrategy?: MemoryConflictResolutionStrategy;
   conflictResolutionByProject?: (
     context: MemoryContext,
@@ -382,6 +388,26 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   }
   if (normA === 0 || normB === 0) return 0;
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+function getLastAccessedAt(record: MemoryRecord): Date {
+  const metadataValue = record.metadata?.["lastAccessedAt"];
+  if (typeof metadataValue === "string") {
+    const parsed = new Date(metadataValue);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  const created = new Date(record.createdAt);
+  return Number.isNaN(created.getTime()) ? new Date(0) : created;
+}
+
+function relevanceDecayMultiplier(record: MemoryRecord, now: Date, halfLifeDays: number): number {
+  const safeHalfLifeDays = Number.isFinite(halfLifeDays) ? Math.max(0.01, halfLifeDays) : 0.01;
+  const ageMs = Math.max(0, now.getTime() - getLastAccessedAt(record).getTime());
+  const ageDays = ageMs / (24 * 60 * 60 * 1000);
+  return 0.5 ** (ageDays / safeHalfLifeDays);
 }
 
 interface MemoryAuditEvent {
@@ -422,6 +448,7 @@ export class InMemoryMemoryStore implements MemoryStore {
   private embeddingProvider: MemoryEmbeddingProvider;
   private defaultEmbeddingModel: string;
   private defaultTopK: number;
+  private relevanceHalfLifeDays: number;
   private conflictResolutionStrategy: MemoryConflictResolutionStrategy;
   private conflictResolutionByProject:
     | ((context: MemoryContext) => MemoryConflictResolutionStrategy | undefined)
@@ -432,6 +459,7 @@ export class InMemoryMemoryStore implements MemoryStore {
     this.embeddingProvider = options?.embeddingProvider ?? new DefaultMemoryEmbeddingProvider();
     this.defaultEmbeddingModel = options?.defaultEmbeddingModel ?? DEFAULT_EMBEDDING_MODEL;
     this.defaultTopK = Math.max(1, options?.defaultTopK ?? DEFAULT_TOP_K);
+    this.relevanceHalfLifeDays = options?.relevanceHalfLifeDays ?? DEFAULT_RELEVANCE_HALF_LIFE_DAYS;
     this.conflictResolutionStrategy = options?.conflictResolutionStrategy ?? "last-write-wins";
     this.conflictResolutionByProject = options?.conflictResolutionByProject;
     this.auditLogger = new MemoryAuditLogger(options?.auditStorage, options?.auditActor);
@@ -833,16 +861,21 @@ export class InMemoryMemoryStore implements MemoryStore {
     const k = Math.max(1, options?.k ?? this.defaultTopK);
     const model = options?.embeddingModel ?? this.defaultEmbeddingModel;
     const filter = options?.filter;
+    const halfLifeDays = options?.relevanceHalfLifeDays ?? this.relevanceHalfLifeDays;
     const queryEmbedding = await this.embeddingProvider.embed(query, { model });
 
     return Array.from(this.records.values())
       .filter((record) => !isExpired(record, now))
       .filter((record) => canRead(record, scope, context, includeShared))
       .filter((record) => matchesFilter(record, filter))
-      .map((memory) => ({
-        memory,
-        score: cosineSimilarity(queryEmbedding, memory.embedding ?? []),
-      }))
+      .map((memory) => {
+        const similarity = cosineSimilarity(queryEmbedding, memory.embedding ?? []);
+        const decay = relevanceDecayMultiplier(memory, now, halfLifeDays);
+        return {
+          memory,
+          score: similarity * decay,
+        };
+      })
       .sort((a, b) => b.score - a.score)
       .slice(0, k);
   }
@@ -929,6 +962,7 @@ export class SqlMemoryStore implements MemoryStore {
   private embeddingProvider: MemoryEmbeddingProvider;
   private defaultEmbeddingModel: string;
   private defaultTopK: number;
+  private relevanceHalfLifeDays: number;
   private conflictResolutionStrategy: MemoryConflictResolutionStrategy;
   private conflictResolutionByProject:
     | ((context: MemoryContext) => MemoryConflictResolutionStrategy | undefined)
@@ -942,6 +976,7 @@ export class SqlMemoryStore implements MemoryStore {
     this.embeddingProvider = options?.embeddingProvider ?? new DefaultMemoryEmbeddingProvider();
     this.defaultEmbeddingModel = options?.defaultEmbeddingModel ?? DEFAULT_EMBEDDING_MODEL;
     this.defaultTopK = Math.max(1, options?.defaultTopK ?? DEFAULT_TOP_K);
+    this.relevanceHalfLifeDays = options?.relevanceHalfLifeDays ?? DEFAULT_RELEVANCE_HALF_LIFE_DAYS;
     this.conflictResolutionStrategy = options?.conflictResolutionStrategy ?? "last-write-wins";
     this.conflictResolutionByProject = options?.conflictResolutionByProject;
     this.auditLogger = new MemoryAuditLogger(options?.auditStorage, options?.auditActor);
@@ -1519,14 +1554,20 @@ export class SqlMemoryStore implements MemoryStore {
   ): Promise<MemorySearchResult[]> {
     const k = Math.max(1, options?.k ?? this.defaultTopK);
     const model = options?.embeddingModel ?? this.defaultEmbeddingModel;
+    const now = options?.now ?? new Date();
+    const halfLifeDays = options?.relevanceHalfLifeDays ?? this.relevanceHalfLifeDays;
     const queryEmbedding = await this.embeddingProvider.embed(query, { model });
     const visible = await this.listByScope(scope, context, options);
 
     return visible
-      .map((memory) => ({
-        memory,
-        score: cosineSimilarity(queryEmbedding, memory.embedding ?? []),
-      }))
+      .map((memory) => {
+        const similarity = cosineSimilarity(queryEmbedding, memory.embedding ?? []);
+        const decay = relevanceDecayMultiplier(memory, now, halfLifeDays);
+        return {
+          memory,
+          score: similarity * decay,
+        };
+      })
       .sort((a, b) => b.score - a.score)
       .slice(0, k);
   }

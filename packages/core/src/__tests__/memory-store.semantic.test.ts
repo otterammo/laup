@@ -142,6 +142,76 @@ describe("memory-store semantic retrieval", () => {
     expect(topThree).toHaveLength(3);
   });
 
+  it("applies relevance decay using lastAccessedAt and boosts recent memories", async () => {
+    const provider = new KeywordEmbeddingProvider(["deploy"]);
+    const store = createSemanticMemoryStore({
+      embeddingProvider: provider,
+      relevanceHalfLifeDays: 7,
+    });
+    const now = new Date("2026-03-05T12:00:00.000Z");
+
+    await store.writeBatch([
+      {
+        id: "recent",
+        content: "deploy",
+        scope: "project",
+        context: PROJECT_CONTEXT,
+        metadata: { lastAccessedAt: "2026-03-04T12:00:00.000Z" },
+      },
+      {
+        id: "stale",
+        content: "deploy",
+        scope: "project",
+        context: PROJECT_CONTEXT,
+        metadata: { lastAccessedAt: "2026-02-03T12:00:00.000Z" },
+      },
+    ]);
+
+    const results = await store.semanticSearch("deploy", "project", PROJECT_CONTEXT, { now, k: 2 });
+
+    expect(results[0]?.memory.id).toBe("recent");
+    expect(results[0]?.score).toBeGreaterThan(results[1]?.score ?? 0);
+  });
+
+  it("supports configurable decay half-life in days", async () => {
+    const provider = new KeywordEmbeddingProvider(["deploy"]);
+    const store = createSemanticMemoryStore({ embeddingProvider: provider });
+    const now = new Date("2026-03-05T12:00:00.000Z");
+
+    await store.writeBatch([
+      {
+        id: "fresh",
+        content: "deploy",
+        scope: "project",
+        context: PROJECT_CONTEXT,
+        metadata: { lastAccessedAt: "2026-03-04T12:00:00.000Z" },
+      },
+      {
+        id: "aging",
+        content: "deploy",
+        scope: "project",
+        context: PROJECT_CONTEXT,
+        metadata: { lastAccessedAt: "2026-02-19T12:00:00.000Z" },
+      },
+    ]);
+
+    const fastDecay = await store.semanticSearch("deploy", "project", PROJECT_CONTEXT, {
+      now,
+      k: 2,
+      relevanceHalfLifeDays: 3,
+    });
+    const slowDecay = await store.semanticSearch("deploy", "project", PROJECT_CONTEXT, {
+      now,
+      k: 2,
+      relevanceHalfLifeDays: 30,
+    });
+
+    const fastGap = (fastDecay[0]?.score ?? 0) - (fastDecay[1]?.score ?? 0);
+    const slowGap = (slowDecay[0]?.score ?? 0) - (slowDecay[1]?.score ?? 0);
+
+    expect(fastGap).toBeGreaterThan(slowGap);
+  });
+
   it("keeps p95 search latency under 500ms for typical batch size", async () => {
     const provider = new KeywordEmbeddingProvider([
       "deploy",
@@ -194,6 +264,6 @@ describe("cosineSimilarity", () => {
 
   it("computes expected similarity", () => {
     const score = cosineSimilarity([1, 1], [1, 0]);
-    expect(score).toBeCloseTo(0.7071, 3);
+    expect(score).toBeCloseTo(Math.SQRT1_2, 3);
   });
 });

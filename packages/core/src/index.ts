@@ -325,6 +325,20 @@ export {
   MemoryConflictError,
   SqlMemoryStore,
 } from "./memory-store.js";
+export type {
+  ZepAddMemoryParams,
+  ZepCompatibleMemoryClient,
+  ZepContextResolver,
+  ZepGetMemoryParams,
+  ZepMemory,
+  ZepMessage,
+  ZepSearchMemoryParams,
+  ZepSessionMemoryClient,
+} from "./memory-zep.js";
+export {
+  DefaultZepContextResolver,
+  ZepMemoryClient,
+} from "./memory-zep.js";
 export type { FieldIssue } from "./parse.js";
 export { ParseError, parseCanonical, parseCanonicalString } from "./parse.js";
 export type {

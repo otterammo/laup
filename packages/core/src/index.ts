@@ -90,6 +90,18 @@ export {
   PriceUnavailableError,
 } from "./cost-conversion.js";
 export type {
+  CostDashboardHistoricalConfig,
+  CostDashboardHistoryPoint,
+  CostDashboardSnapshot,
+  CostDashboardWindow,
+} from "./cost-dashboard.js";
+export {
+  CostDashboardHistoricalConfigSchema,
+  CostDashboardService,
+  CostDashboardWindowSchema,
+  createCostDashboardService,
+} from "./cost-dashboard.js";
+export type {
   AttributionAggregate,
   AttributionCombinationAggregate,
   AttributionDimension,

@@ -106,15 +106,29 @@ export {
 export type {
   CostDashboardHistoricalConfig,
   CostDashboardHistoryPoint,
+  CostDashboardRoutingRecommendationConfig,
   CostDashboardSnapshot,
   CostDashboardWindow,
 } from "./cost-dashboard.js";
 export {
   CostDashboardHistoricalConfigSchema,
+  CostDashboardRoutingRecommendationConfigSchema,
   CostDashboardService,
   CostDashboardWindowSchema,
   createCostDashboardService,
 } from "./cost-dashboard.js";
+export type {
+  AutoModelRoutingPolicy,
+  AutoModelRoutingRule,
+  ModelRoutingRecommendation,
+  ModelRoutingRecommendationOptions,
+} from "./cost-routing-recommendations.js";
+export {
+  AutoModelRoutingPolicySchema,
+  buildAutoModelRoutingRules,
+  generateModelRoutingRecommendations,
+  ModelRoutingRecommendationSchema,
+} from "./cost-routing-recommendations.js";
 export type {
   AttributionAggregate,
   AttributionCombinationAggregate,

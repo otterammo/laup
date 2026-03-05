@@ -188,6 +188,7 @@ pnpm run lint:md           # Markdown and MDC checks only
 pnpm run lint:machine      # YAML + frontmatter + JSON/JSONC (Biome)
 pnpm run lint:fix          # Safe autofix + full lint verification
 pnpm run quality:baseline  # Generate quality/baseline.v1.json
+pnpm run verify:local      # Local gate for changed scope (lint + typecheck + tests)
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
@@ -207,6 +208,8 @@ See [docs/zep-compatibility.md](docs/zep-compatibility.md) for MEM-006 and MEM-0
 Zep-compatible session memory integration patterns, including transcript extraction.
 See [docs/context-packet-format.md](docs/context-packet-format.md) for HAND-001
 standard context packet format requirements.
+See [docs/quality-baseline.md](docs/quality-baseline.md) for QBASE-001 quality baseline
+generation and schema.
 See [docs/handoff-sse.md](docs/handoff-sse.md) for HAND-012 real-time handoff
 streaming integration via Server-Sent Events (SSE).
 

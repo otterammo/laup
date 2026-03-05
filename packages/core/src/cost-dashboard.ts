@@ -1,4 +1,11 @@
 import { z } from "zod";
+import {
+  type AutoModelRoutingPolicy,
+  AutoModelRoutingPolicySchema,
+  buildAutoModelRoutingRules,
+  generateModelRoutingRecommendations,
+  type ModelRoutingRecommendation,
+} from "./cost-routing-recommendations.js";
 import { aggregateUsage, type CostSummary } from "./cost-schema.js";
 import type { PricingProvider } from "./pricing-provider.js";
 import type { UsageStorage } from "./usage-storage.js";
@@ -17,11 +24,27 @@ export const CostDashboardHistoricalConfigSchema = z.object({
 
 export type CostDashboardHistoricalConfig = z.infer<typeof CostDashboardHistoricalConfigSchema>;
 
+export const CostDashboardRoutingRecommendationConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  minEvents: z.number().int().positive().default(5),
+  maxRecommendations: z.number().int().positive().default(20),
+  autoRouting: AutoModelRoutingPolicySchema.default({
+    enabled: false,
+    minimumConfidence: 0.75,
+    minimumSavingsUsd: 0,
+  }),
+});
+
+export type CostDashboardRoutingRecommendationConfig = z.infer<
+  typeof CostDashboardRoutingRecommendationConfigSchema
+>;
+
 export interface CostDashboardConfig {
   usageStorage: UsageStorage;
   pricingProvider: PricingProvider;
   windows?: CostDashboardWindow[];
   historical?: Partial<CostDashboardHistoricalConfig>;
+  routingRecommendations?: Partial<CostDashboardRoutingRecommendationConfig>;
   now?: () => Date;
 }
 
@@ -50,6 +73,22 @@ export interface CostDashboardSnapshot {
     bucket: "hour" | "day";
     points: CostDashboardHistoryPoint[];
   };
+  routingRecommendations: {
+    enabled: boolean;
+    recommendations: ModelRoutingRecommendation[];
+    autoRouting: {
+      enabled: boolean;
+      policy: AutoModelRoutingPolicy;
+      rules: Array<{
+        taskType: string;
+        provider: string;
+        fromModel: string;
+        toModel: string;
+        confidence: number;
+        estimatedSavings: number;
+      }>;
+    };
+  };
 }
 
 const DEFAULT_WINDOWS: CostDashboardWindow[] = [
@@ -62,11 +101,15 @@ export class CostDashboardService {
   private readonly now: () => Date;
   private readonly windows: CostDashboardWindow[];
   private readonly historical: CostDashboardHistoricalConfig;
+  private readonly routingRecommendations: CostDashboardRoutingRecommendationConfig;
 
   constructor(private readonly config: CostDashboardConfig) {
     this.now = config.now ?? (() => new Date());
     this.windows = normalizeWindows(config.windows ?? DEFAULT_WINDOWS);
     this.historical = CostDashboardHistoricalConfigSchema.parse(config.historical ?? {});
+    this.routingRecommendations = CostDashboardRoutingRecommendationConfigSchema.parse(
+      config.routingRecommendations ?? {},
+    );
   }
 
   async snapshot(): Promise<CostDashboardSnapshot> {
@@ -104,6 +147,18 @@ export class CostDashboardService {
 
     const historicalPoints = buildHistory(events, pricingMap, endTime, this.historical);
 
+    const recommendations = this.routingRecommendations.enabled
+      ? generateModelRoutingRecommendations(events, pricingMap, {
+          minEvents: this.routingRecommendations.minEvents,
+          maxRecommendations: this.routingRecommendations.maxRecommendations,
+        })
+      : [];
+
+    const autoRoutingRules = buildAutoModelRoutingRules(
+      recommendations,
+      this.routingRecommendations.autoRouting,
+    );
+
     return {
       generatedAt: endTime.toISOString(),
       realtime: {
@@ -116,6 +171,15 @@ export class CostDashboardService {
       historical: {
         bucket: this.historical.bucket,
         points: historicalPoints,
+      },
+      routingRecommendations: {
+        enabled: this.routingRecommendations.enabled,
+        recommendations,
+        autoRouting: {
+          enabled: this.routingRecommendations.autoRouting.enabled,
+          policy: this.routingRecommendations.autoRouting,
+          rules: autoRoutingRules,
+        },
       },
     };
   }

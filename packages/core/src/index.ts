@@ -180,6 +180,12 @@ export {
   createMigrator,
   Migrator,
 } from "./db-migrations.js";
+export type { SendHandoffOptions, SendHandoffResult } from "./handoff-manager.js";
+export {
+  HandoffManager,
+  HandoffTimeoutError,
+  waitForAckWithTimeout,
+} from "./handoff-manager.js";
 export type {
   HandoffRoutingCandidate,
   HandoffRoutingDecision as ResolvedHandoffRoutingDecision,

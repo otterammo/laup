@@ -115,6 +115,16 @@ function mergeFrontmatter(base: Frontmatter, override: Frontmatter): Frontmatter
     result.permissions = { ...base.permissions, ...override.permissions };
   }
 
+  // Handoff templates: merge by template name, higher-precedence replaces lower.
+  if (override.handoff) {
+    result.handoff = {
+      templates: {
+        ...(base.handoff?.templates ?? {}),
+        ...(override.handoff.templates ?? {}),
+      },
+    };
+  }
+
   return result;
 }
 

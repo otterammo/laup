@@ -38,6 +38,14 @@ const { values: flags, positionals } = parseArgs({
     "teams-dir": { type: "string" },
     format: { type: "string", short: "f" },
     output: { type: "string" },
+    template: { type: "string" },
+    include: { type: "string" },
+    routing: { type: "string" },
+    constraints: { type: "string" },
+    mode: { type: "string" },
+    timeout: { type: "string" },
+    "permission-allow": { type: "string" },
+    "permission-deny": { type: "string" },
     help: { type: "boolean", short: "h", default: false },
   },
   allowPositionals: true,
@@ -63,6 +71,7 @@ Commands:
   sync      Sync canonical instruction file to tool-specific output files
   validate  Validate a canonical instruction file against the ADR-001 schema
   import    Import a tool-specific file to canonical format (CONF-013)
+  handoff   Resolve and render a named handoff template from canonical config (HAND-011)
 
 Options for sync:
   --source, -s       Path to canonical instruction file (required)
@@ -86,6 +95,17 @@ Options for import:
   --source, -s      Path to tool-specific file (required)
   --format, -f      Source format (auto-detected if not specified)
   --output          Output path for canonical file (default: stdout)
+
+Options for handoff:
+  --source, -s            Path to canonical instruction file (required)
+  --template              Named handoff template from frontmatter.handoff.templates (required)
+  --include               Comma-separated field paths override for includedFields
+  --routing               Override routing policy
+  --constraints           Comma-separated default constraints override
+  --permission-allow      Comma-separated permission allow list override
+  --permission-deny       Comma-separated permission deny list override
+  --mode                  Optional handoff mode override (sync|async)
+  --timeout               Optional timeout override in seconds
 
 Supported import formats: ${IMPORT_FORMATS.join(", ")}
 Registered adapters: ${ALL_ADAPTERS.map((a) => a.toolId).join(", ")}`);
@@ -278,6 +298,80 @@ if (command === "sync") {
   }
 
   process.exit(hasError ? 1 : 0);
+}
+
+if (command === "handoff") {
+  const source = flags.source;
+  const templateName = flags.template;
+  if (!source) {
+    console.error("Error: --source is required for handoff");
+    process.exit(1);
+  }
+  if (!templateName) {
+    console.error("Error: --template is required for handoff");
+    process.exit(1);
+  }
+
+  const csv = (input?: string): string[] | undefined => {
+    if (!input) return undefined;
+    return input
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  };
+
+  try {
+    const doc = parseCanonical(resolve(source));
+    const handoff = (
+      doc.frontmatter as {
+        handoff?: {
+          templates?: Record<
+            string,
+            {
+              version: string;
+              includedFields: string[];
+              routingPolicy: string;
+              permissionScope: { allow: string[]; deny: string[] };
+              defaultConstraints: string[];
+            }
+          >;
+        };
+      }
+    ).handoff;
+
+    const template = handoff?.templates?.[templateName];
+    if (!template) {
+      const available = Object.keys(handoff?.templates ?? {});
+      const hint = available.length > 0 ? ` Available templates: ${available.join(", ")}` : "";
+      throw new Error(`Unknown handoff template '${templateName}'.${hint}`);
+    }
+
+    const timeoutOverride = flags.timeout ? Number.parseInt(flags.timeout, 10) : undefined;
+    if (flags.timeout && Number.isNaN(timeoutOverride)) {
+      throw new Error("--timeout must be a number");
+    }
+
+    const resolved = {
+      name: templateName,
+      version: template.version,
+      includedFields: csv(flags.include) ?? template.includedFields,
+      routingPolicy: flags.routing ?? template.routingPolicy,
+      permissionScope: {
+        allow: csv(flags["permission-allow"]) ?? template.permissionScope.allow,
+        deny: csv(flags["permission-deny"]) ?? template.permissionScope.deny,
+      },
+      defaultConstraints: csv(flags.constraints) ?? template.defaultConstraints,
+      ...(flags.mode ? { mode: flags.mode } : {}),
+      ...(timeoutOverride !== undefined ? { timeoutSeconds: timeoutOverride } : {}),
+    };
+
+    console.log(JSON.stringify(resolved, null, 2));
+  } catch (err) {
+    console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+
+  process.exit(0);
 }
 
 if (command === "import") {

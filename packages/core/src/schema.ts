@@ -82,6 +82,23 @@ export const ToolOverridesSchema = z.looseObject({
 
 // ─── Frontmatter schema (ADR-001 §7.2) ───────────────────────────────────────
 
+const HandoffTemplateConfigSchema = z.object({
+  version: z.string().regex(/^\d+\.\d+\.\d+$/, "template version must match semver N.N.N"),
+  includedFields: z.array(z.string()).default([]),
+  routingPolicy: z.enum(["direct", "round-robin", "least-loaded", "capability-match"]),
+  permissionScope: z
+    .object({
+      allow: z.array(z.string()).default([]),
+      deny: z.array(z.string()).default([]),
+    })
+    .default({ allow: [], deny: [] }),
+  defaultConstraints: z.array(z.string()).default([]),
+});
+
+const HandoffConfigSchema = z.object({
+  templates: z.record(z.string(), HandoffTemplateConfigSchema).default({}),
+});
+
 export const FrontmatterSchema = z.object({
   version: z
     .string()
@@ -107,6 +124,7 @@ export const FrontmatterSchema = z.object({
       allowedTools: z.array(z.string()).optional(),
     })
     .optional(),
+  handoff: HandoffConfigSchema.optional(),
 });
 
 // ─── Top-level canonical document schema ─────────────────────────────────────

@@ -241,31 +241,75 @@ export type ModelPricing = z.infer<typeof ModelPricingSchema>;
 /**
  * Budget alert configuration (COST-004).
  */
-export const BudgetAlertSchema = z.object({
-  /** Alert ID */
-  id: z.string(),
+export const BudgetAlertSchema = z
+  .object({
+    /** Alert ID */
+    id: z.string(),
 
-  /** Alert name */
-  name: z.string(),
+    /** Alert name */
+    name: z.string(),
 
-  /** Threshold amount (USD) */
-  threshold: z.number().positive(),
+    /** Optional absolute threshold amount (USD) */
+    threshold: z.number().positive().optional(),
 
-  /** Time period */
-  period: z.enum(["daily", "weekly", "monthly", "quarterly", "yearly"]),
+    /** Configured budget amount for percentage-based alerts (USD) */
+    budget: z.number().positive().optional(),
 
-  /** Attribution filter */
-  filter: UsageAttributionSchema.optional(),
+    /** Alert trigger percentages of budget (e.g., 75, 90, 100) */
+    percentages: z.array(z.number().gt(0).lte(100)).min(1).optional(),
 
-  /** Alert recipients */
-  recipients: z.array(z.string()),
+    /** Whether projected spend should be used for trigger evaluation */
+    projected: z.boolean().optional(),
 
-  /** Whether alert is enabled */
-  enabled: z.boolean().default(true),
+    /** Time period */
+    period: z.enum(["daily", "weekly", "monthly", "quarterly", "yearly"]),
 
-  /** Notification channels */
-  channels: z.array(z.enum(["email", "slack", "webhook"])).default(["email"]),
-});
+    /** Optional attribution target (COST-004): developer/team/project */
+    attributionDimension: z.enum(["developerId", "teamId", "projectId"]).optional(),
+
+    /** Attribution value for the configured dimension */
+    attributionValue: z.string().optional(),
+
+    /** Attribution filter */
+    filter: UsageAttributionSchema.optional(),
+
+    /** Alert recipients */
+    recipients: z.array(z.string()),
+
+    /** Whether alert is enabled */
+    enabled: z.boolean().default(true),
+
+    /** Notification channels (PERM-017) */
+    channels: z.array(z.enum(["email", "slack", "webhook"])).default(["email"]),
+  })
+  .superRefine((value, ctx) => {
+    if (value.attributionDimension && !value.attributionValue) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "attributionValue is required when attributionDimension is configured",
+        path: ["attributionValue"],
+      });
+    }
+
+    if (value.attributionValue && !value.attributionDimension) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "attributionDimension is required when attributionValue is configured",
+        path: ["attributionDimension"],
+      });
+    }
+
+    const hasAbsoluteThreshold = value.threshold !== undefined;
+    const hasPercentageThreshold = value.budget !== undefined;
+
+    if (!hasAbsoluteThreshold && !hasPercentageThreshold) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Either threshold or budget must be configured",
+        path: ["threshold"],
+      });
+    }
+  });
 
 export type BudgetAlert = z.infer<typeof BudgetAlertSchema>;
 
@@ -371,10 +415,42 @@ export function isCostCapExceeded(currentCost: number, cap: CostCap): boolean {
 }
 
 /**
+ * Project end-of-period cost from current spend and elapsed period time.
+ */
+export function projectPeriodCost(
+  currentCost: number,
+  elapsedMs: number,
+  periodMs: number,
+): number {
+  if (elapsedMs <= 0 || periodMs <= 0) return currentCost;
+  return (currentCost / elapsedMs) * periodMs;
+}
+
+/**
  * Check if a budget alert should fire.
  */
-export function shouldFireAlert(currentCost: number, alert: BudgetAlert): boolean {
-  return alert.enabled && currentCost >= alert.threshold;
+export function shouldFireAlert(
+  currentCost: number,
+  alert: BudgetAlert,
+  options?: { elapsedMs?: number; periodMs?: number },
+): boolean {
+  if (!alert.enabled) return false;
+
+  const evaluationCost =
+    alert.projected && options?.elapsedMs && options?.periodMs
+      ? projectPeriodCost(currentCost, options.elapsedMs, options.periodMs)
+      : currentCost;
+
+  if (alert.threshold !== undefined && evaluationCost >= alert.threshold) {
+    return true;
+  }
+
+  if (alert.budget !== undefined) {
+    const percentages = alert.percentages?.length ? alert.percentages : [100];
+    return percentages.some((percentage) => evaluationCost >= alert.budget! * (percentage / 100));
+  }
+
+  return false;
 }
 
 /**

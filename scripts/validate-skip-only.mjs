@@ -14,7 +14,7 @@
  *   1 - Violations found or validation error
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { relative, resolve } from "node:path";
 
 // Patterns to detect skip/only markers
@@ -52,7 +52,10 @@ function loadAllowlist() {
  */
 function checkAllowlist(filePath, allowlist) {
   // Normalize to relative path for comparison with allowlist
-  const normalizedPath = relative(process.cwd(), resolve(filePath));
+  // Use realpathSync to resolve symlinks (handles macOS /tmp -> /private/tmp)
+  const cwd = realpathSync(process.cwd());
+  const realPath = realpathSync(resolve(filePath));
+  const normalizedPath = relative(cwd, realPath);
   const entry = allowlist.find((item) => item.path === normalizedPath);
 
   if (!entry) {

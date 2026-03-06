@@ -41,12 +41,12 @@ jobs:
           OUTPUT=$(node scripts/check-diff-coverage.mjs 2>&1) || FAILED=true
           echo "$OUTPUT"
           COVERAGE=$(echo "$OUTPUT" | grep -oP 'Overall diff coverage: \K[\d.]+' || echo "0")
-          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+          echo "coverage=$COVERAGE" >> "$GITHUB_OUTPUT"
           if [ "$FAILED" = "true" ]; then
-            echo "failed=true" >> $GITHUB_OUTPUT
+            echo "failed=true" >> "$GITHUB_OUTPUT"
             exit 1
           else
-            echo "failed=false" >> $GITHUB_OUTPUT
+            echo "failed=false" >> "$GITHUB_OUTPUT"
           fi
         env:
           BASE_BRANCH: ${{ github.base_ref }}

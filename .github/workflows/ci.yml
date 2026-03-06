@@ -26,6 +26,8 @@ jobs:
           cache: "pnpm"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Validate lint warnings allowlist (CIG-002)
+        run: pnpm run quality:validate-lint-warnings
       - name: Run lint
         run: pnpm run lint
 

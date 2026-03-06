@@ -22,7 +22,9 @@
     "lint:yaml:fix": "node scripts/lint-yaml.mjs --fix",
     "lint:machine": "pnpm run lint:yaml && pnpm run lint:frontmatter && pnpm run lint:biome",
     "tutorial": "scripts/tutorial.sh",
-    "quality:baseline": "node scripts/quality-baseline.mjs"
+    "quality:baseline": "node scripts/quality-baseline.mjs",
+    "quality:validate-gaps": "node scripts/validate-quality-gaps.mjs",
+    "quality:validate-questions": "node scripts/validate-challenge-questions.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",

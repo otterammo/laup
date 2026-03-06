@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+# LGR-002: Pre-Push Quality Gate
+# Runs changed-scope verification before allowing push.
+# Falls back to full-repo checks when root-level changes are detected.
+
+echo "Running pre-push quality gate (LGR-002)..."
+
+# Run the verify:local command which includes changed-scope detection
+# and automatic fallback to full-repo checks when needed
+pnpm run verify:local
+
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ Pre-push quality gate failed!"
+  echo "   Fix the issues above before pushing."
+  echo "   To bypass (not recommended): git push --no-verify"
+  exit 1
+fi
+
+echo "✅ Pre-push quality gate passed!"

@@ -1,3 +1,4 @@
+#!/usr/bin/env sh
 commit_regex='^(feat|fix|docs|style|refactor|test|chore|ci|perf|revert)(\(.+\))?: .{1,100}$'
 if ! grep -qE "$commit_regex" "$1"; then
   echo "ERROR: Commit message must follow conventional commits format."

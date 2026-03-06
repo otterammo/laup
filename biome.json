@@ -28,6 +28,13 @@
     }
   },
   "files": {
-    "includes": ["**", "!**/node_modules", "!**/dist", "!**/*.tsbuildinfo", "!**/pnpm-lock.yaml"]
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/coverage",
+      "!**/*.tsbuildinfo",
+      "!**/pnpm-lock.yaml"
+    ]
   }
 }

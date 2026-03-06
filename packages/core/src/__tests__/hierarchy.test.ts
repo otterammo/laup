@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { findRootInstruction, loadHierarchy } from "../hierarchy.js";
+import { pathsEqual } from "./utils/path-normalization.js";
 
 describe("hierarchy", () => {
   let testDir: string;
@@ -87,7 +88,7 @@ ${body}`;
       const result = loadHierarchy(join(apiDir, "laup.md"));
 
       expect(result.documents).toHaveLength(2);
-      expect(result.searched).toContain(srcDir);
+      expect(result.searched.some((p: string) => pathsEqual(p, srcDir))).toBe(true);
       expect(result.merged.body).toBe("# Root\n\n# API");
     });
 
@@ -180,7 +181,8 @@ ${body}`;
 
       const root = findRootInstruction(childDir);
 
-      expect(root).toBe(join(rootDir, "laup.md"));
+      expect(root).toBeDefined();
+      expect(pathsEqual(root as string, join(rootDir, "laup.md"))).toBe(true);
     });
 
     it("returns topmost instruction file", () => {
@@ -192,7 +194,8 @@ ${body}`;
 
       const root = findRootInstruction(srcDir);
 
-      expect(root).toBe(join(rootDir, "laup.md"));
+      expect(root).toBeDefined();
+      expect(pathsEqual(root as string, join(rootDir, "laup.md"))).toBe(true);
     });
 
     it("returns undefined when no instruction file found", () => {
@@ -210,7 +213,8 @@ ${body}`;
 
       const root = findRootInstruction(rootDir, "CUSTOM.md");
 
-      expect(root).toBe(join(rootDir, "CUSTOM.md"));
+      expect(root).toBeDefined();
+      expect(pathsEqual(root as string, join(rootDir, "CUSTOM.md"))).toBe(true);
     });
   });
 });

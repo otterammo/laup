@@ -47,8 +47,12 @@ jobs:
         run: pnpm run typecheck
 
   test:
-    name: quality/test
-    runs-on: ubuntu-latest
+    name: quality/test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4

@@ -171,7 +171,7 @@ describe('my test', () => {
       allowlistPath,
       JSON.stringify([
         {
-          path: testFile,
+          path: "__tests__/allowed.test.ts", // Use relative path
           issueId: "#250",
           expiryDate: futureDate.toISOString().split("T")[0],
           reason: "Temporary skip during refactoring",
@@ -213,7 +213,7 @@ describe('my test', () => {
       allowlistPath,
       JSON.stringify([
         {
-          path: testFile,
+          path: "__tests__/expired.test.ts", // Use relative path
           issueId: "#250",
           expiryDate: pastDate.toISOString().split("T")[0],
           reason: "Temporary skip during refactoring",
@@ -254,7 +254,7 @@ describe('my test', () => {
       allowlistPath,
       JSON.stringify([
         {
-          path: testFile,
+          path: "__tests__/no-issue.test.ts", // Use relative path
           expiryDate: futureDate.toISOString().split("T")[0],
           reason: "Temporary skip during refactoring",
         },
@@ -291,7 +291,7 @@ describe('my test', () => {
       allowlistPath,
       JSON.stringify([
         {
-          path: testFile,
+          path: "__tests__/no-expiry.test.ts", // Use relative path
           issueId: "#250",
           reason: "Temporary skip during refactoring",
         },

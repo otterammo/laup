@@ -110,6 +110,10 @@ function filesByExtensions(files, exts) {
 }
 
 function main() {
+  // LGR-007: Check toolchain versions before any other verification steps
+  console.log("Verifying toolchain versions...\n");
+  run("node", ["scripts/verify-toolchain.mjs"]);
+
   const baseRef = resolveBaseRef();
   const files = changedFiles(baseRef);
 

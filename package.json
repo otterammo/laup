@@ -13,18 +13,20 @@
     "verify:local": "node scripts/verify-local.mjs",
     "clean": "pnpm -r run clean && rm -rf node_modules",
     "prepare": "husky",
-    "lint:biome": "biome check .",
+    "lint:biome": "biome check . --error-on-warnings",
     "lint:biome:fix": "biome check --write .",
     "lint:md": "markdownlint-cli2",
     "lint:md:fix": "markdownlint-cli2 --fix",
     "lint:frontmatter": "node scripts/lint-frontmatter.mjs",
     "lint:yaml": "node scripts/lint-yaml.mjs",
     "lint:yaml:fix": "node scripts/lint-yaml.mjs --fix",
-    "lint:machine": "pnpm run lint:yaml && pnpm run lint:frontmatter && pnpm run lint:biome",
+    "lint:machine": "node scripts/validate-lint-warnings.mjs && pnpm run lint:yaml && pnpm run lint:frontmatter && pnpm run lint:biome",
     "tutorial": "scripts/tutorial.sh",
     "quality:baseline": "node scripts/quality-baseline.mjs",
     "quality:validate-gaps": "node scripts/validate-quality-gaps.mjs",
-    "quality:validate-questions": "node scripts/validate-challenge-questions.mjs"
+    "quality:validate-questions": "node scripts/validate-challenge-questions.mjs",
+    "quality:validate-lint-warnings": "node scripts/validate-lint-warnings.mjs",
+    "quality:check-diff-coverage": "node scripts/check-diff-coverage.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",

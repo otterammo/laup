@@ -8,6 +8,12 @@ export default defineConfig({
       provider: "v8",
       include: ["packages/**/src/**/*.ts"],
       exclude: ["packages/**/src/__tests__/**"],
+      thresholds: {
+        lines: 80,
+        statements: 80,
+        functions: 80,
+        branches: 80,
+      },
     },
     // CIG-004: Test Hermeticity and Portability
     // Tests should run in isolation without external dependencies

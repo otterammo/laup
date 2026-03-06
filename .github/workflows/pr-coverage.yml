@@ -1,0 +1,94 @@
+name: pr-coverage
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  diff-coverage:
+    name: pr/diff-coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace packages needed by tests
+        run: pnpm --filter @laup/core --filter @laup/aider --filter @laup/claude-code --filter @laup/codex --filter @laup/copilot --filter @laup/cursor --filter @laup/opencode --filter @laup/config-hub run build
+
+      - name: Run tests with coverage
+        run: pnpm run test:run --coverage
+        env:
+          CI: true
+
+      - name: Check diff coverage
+        id: diff-coverage
+        run: |
+          OUTPUT=$(node scripts/check-diff-coverage.mjs 2>&1) || FAILED=true
+          echo "$OUTPUT"
+          COVERAGE=$(echo "$OUTPUT" | grep -oP 'Overall diff coverage: \K[\d.]+' || echo "0")
+          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+          if [ "$FAILED" = "true" ]; then
+            echo "failed=true" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "failed=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+
+      - name: Comment PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            let output;
+            let failed = false;
+            try {
+              output = execSync('BASE_BRANCH=${{ github.base_ref }} node scripts/check-diff-coverage.mjs', {
+                encoding: 'utf-8',
+                stdio: 'pipe'
+              });
+            } catch (error) {
+              output = error.stdout + error.stderr;
+              failed = true;
+            }
+            const status = failed ? '❌ Failed' : '✅ Passed';
+            const threshold = process.env.DIFF_COVERAGE_THRESHOLD || '90';
+            const body = `## Diff Coverage Report\n\n${status}\n\n\`\`\`\n${output}\n\`\`\`\n\n**Threshold:** ${threshold}%\n\n---\n*This check ensures that new and modified code has adequate test coverage.*\n*See [docs/coverage-threshold.md](../blob/main/docs/coverage-threshold.md) for details.*`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComment = comments.find(comment => comment.user.type === 'Bot' && comment.body.includes('Diff Coverage Report'));
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }

@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "path": "tests/scripts/validate-skip-only.test.ts",
+    "issueId": "#246",
+    "expiryDate": "2026-06-30",
+    "reason": "Test file for LGR-004 skip/only validator - intentionally contains .skip/.only markers to test validation logic"
+  }
+]

@@ -6,12 +6,25 @@ import { describe, expect, it } from "vitest";
 
 describe("LGR-003: Staged-file lint warning escalation", () => {
   it("should treat warnings as blocking when checking staged files", () => {
-    // Create a temporary test file with a warning-level violation
+    // Create a temporary test directory with biome config and test file
     const tempDir = mkdtempSync(join(tmpdir(), "lint-staged-test-"));
     const testFile = join(tempDir, "test-warning.ts");
+    const biomeConfig = join(tempDir, "biome.json");
 
-    // noNonNullAssertion is configured as "warn" in biome.json
-    // Using non-null assertion (!) should trigger this warning
+    // Create a biome config with noNonNullAssertion set to "warn"
+    const biomeConfigContent = {
+      linter: {
+        enabled: true,
+        rules: {
+          style: {
+            noNonNullAssertion: "warn",
+          },
+        },
+      },
+    };
+    writeFileSync(biomeConfig, JSON.stringify(biomeConfigContent, null, 2));
+
+    // Using non-null assertion (!) should trigger noNonNullAssertion warning
     const codeWithWarning = `export function example(value: string | null) {
   // This should trigger noNonNullAssertion warning
   return value!.toUpperCase();
@@ -21,9 +34,9 @@ describe("LGR-003: Staged-file lint warning escalation", () => {
     writeFileSync(testFile, codeWithWarning);
 
     try {
-      // Run biome check with --error-on-warnings
-      execSync(`npx biome check --error-on-warnings "${testFile}"`, {
-        cwd: join(process.cwd()),
+      // Run biome check with --error-on-warnings using the project's biome
+      execSync(`pnpm exec biome check --error-on-warnings "${testFile}"`, {
+        cwd: tempDir,
         encoding: "utf8",
       });
 
@@ -60,8 +73,8 @@ describe("LGR-003: Staged-file lint warning escalation", () => {
     writeFileSync(testFile, cleanCode);
 
     try {
-      // Run biome check with --error-on-warnings
-      execSync(`npx biome check --error-on-warnings "${testFile}"`, {
+      // Run biome check with --error-on-warnings using the project's biome
+      execSync(`pnpm exec biome check --error-on-warnings "${testFile}"`, {
         cwd: join(process.cwd()),
         encoding: "utf8",
       });

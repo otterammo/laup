@@ -91,7 +91,7 @@ export function parseConstraint(constraint: string): VersionConstraint {
   const rangeMatch = trimmed.match(
     /^(>=?)?(\d+\.\d+\.\d+(?:-[a-z0-9.]+)?)\s+(<?=?)(\d+\.\d+\.\d+(?:-[a-z0-9.]+)?)$/i,
   );
-  if (rangeMatch && rangeMatch[2] && rangeMatch[4]) {
+  if (rangeMatch?.[2] && rangeMatch[4]) {
     return {
       type: "range",
       min: rangeMatch[2],
@@ -103,7 +103,7 @@ export function parseConstraint(constraint: string): VersionConstraint {
 
   // Single bound: >=1.0.0 or <2.0.0
   const singleBoundMatch = trimmed.match(/^(>=?|<=?)?(\d+\.\d+\.\d+(?:-[a-z0-9.]+)?)$/i);
-  if (singleBoundMatch && singleBoundMatch[2]) {
+  if (singleBoundMatch?.[2]) {
     const op = singleBoundMatch[1];
     const ver = singleBoundMatch[2];
 

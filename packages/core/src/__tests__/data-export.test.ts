@@ -140,7 +140,7 @@ describe("data-export", () => {
     });
 
     it("throws for unsupported format", () => {
-      // @ts-expect-error - Testing error handling with invalid format
+      // @ts-expect-error - Testing invalid format
       expect(() => exportData(sampleRecords, { format: "xml" })).toThrow("Unsupported format");
     });
   });

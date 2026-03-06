@@ -33,8 +33,10 @@ describe("LGR-003: Staged-file lint warning escalation", () => {
     } catch (error) {
       // We expect this to throw because warnings should be treated as errors
       expect(error).toBeDefined();
-      // Verify it's a non-zero exit code
-      expect((error as { status?: number }).status).toBeGreaterThan(0);
+      // Verify it's a non-zero exit code (execSync uses 'status' property)
+      const exitStatus = (error as { status?: number }).status;
+      expect(exitStatus).toBeDefined();
+      expect(exitStatus).toBeGreaterThan(0);
     } finally {
       // Cleanup
       rmSync(tempDir, { recursive: true, force: true });

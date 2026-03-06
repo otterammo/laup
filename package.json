@@ -50,6 +50,12 @@
     "*.{yml,yaml}": [
       "node scripts/lint-yaml.mjs --fix",
       "node scripts/lint-yaml.mjs"
+    ],
+    "*{test,spec}.{ts,js}": [
+      "node scripts/validate-skip-only.mjs"
+    ],
+    "**/__tests__/**/*.{ts,js}": [
+      "node scripts/validate-skip-only.mjs"
     ]
   },
   "engines": {

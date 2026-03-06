@@ -1,0 +1,8 @@
+[
+  {
+    "path": "packages/core/src/__tests__/example.test.ts",
+    "issueId": "#123",
+    "expiryDate": "2026-12-31",
+    "reason": "Temporary skip during refactoring - see issue for details"
+  }
+]

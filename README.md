@@ -202,6 +202,8 @@ See [docs/memory-scopes.md](docs/memory-scopes.md) for MEM-001 and MEM-012 memor
 audit trail behavior.
 See [docs/external-knowledge-base.md](docs/external-knowledge-base.md) for MEM-015
 read-only external knowledge base integration (Confluence/Notion connectors + sync service).
+See [docs/quality-baseline.md](docs/quality-baseline.md) for QBASE-001 versioned quality
+baseline generation and schema.
 See [docs/zep-compatibility.md](docs/zep-compatibility.md) for MEM-006 and MEM-007
 Zep-compatible session memory integration patterns, including transcript extraction.
 See [docs/context-packet-format.md](docs/context-packet-format.md) for HAND-001

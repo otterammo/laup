@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "1.0.0",
+  "commitSha": "6fa8a80c3dce6f3d1c53d033b442d212f87b2da9",
+  "generationTimestamp": "2026-03-05T08:23:41-06:00",
+  "lintDiagnosticsBySeverity": {
+    "error": 0,
+    "warning": 0,
+    "info": 0
+  },
+  "skippedTests": 0,
+  "flakyTests": 0,
+  "coverageByPackage": {
+    "adapters": {
+      "lines": {
+        "covered": 125,
+        "total": 129,
+        "pct": 96.9
+      },
+      "statements": {
+        "covered": 127,
+        "total": 131,
+        "pct": 96.95
+      },
+      "functions": {
+        "covered": 22,
+        "total": 25,
+        "pct": 88
+      },
+      "branches": {
+        "covered": 33,
+        "total": 38,
+        "pct": 86.84
+      }
+    },
+    "cli": {
+      "lines": {
+        "covered": 0,
+        "total": 169,
+        "pct": 0
+      },
+      "statements": {
+        "covered": 0,
+        "total": 174,
+        "pct": 0
+      },
+      "functions": {
+        "covered": 0,
+        "total": 9,
+        "pct": 0
+      },
+      "branches": {
+        "covered": 0,
+        "total": 116,
+        "pct": 0
+      }
+    },
+    "config-hub": {
+      "lines": {
+        "covered": 234,
+        "total": 407,
+        "pct": 57.49
+      },
+      "statements": {
+        "covered": 249,
+        "total": 440,
+        "pct": 56.59
+      },
+      "functions": {
+        "covered": 57,
+        "total": 67,
+        "pct": 85.07
+      },
+      "branches": {
+        "covered": 127,
+        "total": 288,
+        "pct": 44.1
+      }
+    },
+    "core": {
+      "lines": {
+        "covered": 4859,
+        "total": 6058,
+        "pct": 80.21
+      },
+      "statements": {
+        "covered": 5160,
+        "total": 6609,
+        "pct": 78.08
+      },
+      "functions": {
+        "covered": 1133,
+        "total": 1374,
+        "pct": 82.46
+      },
+      "branches": {
+        "covered": 3305,
+        "total": 5208,
+        "pct": 63.46
+      }
+    }
+  }
+}

@@ -15,7 +15,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 
 // Patterns to detect skip/only markers
 const SKIP_ONLY_PATTERNS = [
@@ -51,7 +51,9 @@ function loadAllowlist() {
  * @returns {{allowed: boolean, expired: boolean, entry: object | null}}
  */
 function checkAllowlist(filePath, allowlist) {
-  const entry = allowlist.find((item) => item.path === filePath);
+  // Normalize to relative path for comparison with allowlist
+  const normalizedPath = relative(process.cwd(), resolve(filePath));
+  const entry = allowlist.find((item) => item.path === normalizedPath);
 
   if (!entry) {
     return { allowed: false, expired: false, entry: null };

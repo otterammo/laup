@@ -50,7 +50,16 @@ export function loadHierarchy(
   const filename = options.filename ?? "laup.md";
   const maxDepth = options.maxDepth ?? 10;
   const resolvedTarget = resolve(targetPath);
-  const stopAt = options.stopAt ? resolve(options.stopAt) : undefined;
+  let stopAt: string | undefined;
+  if (options.stopAt) {
+    const resolvedStopAt = resolve(options.stopAt);
+    try {
+      // Normalize through realpath to handle symlinks (e.g., macOS /var -> /private/var)
+      stopAt = realpathSync(resolvedStopAt);
+    } catch (error) {
+      throw new Error(`stopAt directory does not exist: ${resolvedStopAt}`, { cause: error });
+    }
+  }
 
   if (!existsSync(resolvedTarget)) {
     throw new Error(`Target file not found: ${resolvedTarget}`);

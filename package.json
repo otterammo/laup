@@ -29,11 +29,11 @@
     "quality:check-diff-coverage": "node scripts/check-diff-coverage.mjs"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.4",
-    "@changesets/cli": "^2.27.11",
-    "@types/node": "^25.3.2",
+    "@biomejs/biome": "^2.4.6",
+    "@changesets/cli": "^2.30.0",
+    "@types/node": "^25.3.5",
     "husky": "^9.1.7",
-    "lint-staged": "^16.2.7",
+    "lint-staged": "^16.3.2",
     "markdownlint-cli2": "^0.21.0",
     "typescript": "^5.7.3",
     "vitest": "^4.0.18",

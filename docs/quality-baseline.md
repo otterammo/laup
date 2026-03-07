@@ -13,6 +13,14 @@ The baseline contains:
 - `flakyTests`
 - `coverageByPackage` (`lines`, `statements`, `functions`, `branches`)
 
+## Committed Baseline
+
+The current quality baseline is committed to the repository and can be viewed at:
+
+**[quality/baseline.v1.json](../quality/baseline.v1.json)**
+
+This baseline is locked as part of MIG-001 (Baseline Lock Before Enforcement) and serves as the reference point for quality metrics tracking and enforcement.
+
 ## Determinism
 
 For the same repository content and commit SHA, baseline output is stable:

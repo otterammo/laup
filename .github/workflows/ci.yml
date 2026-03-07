@@ -127,3 +127,53 @@ jobs:
       - uses: actions/checkout@v6
       - name: Lint GitHub Actions workflows (CIG-005)
         uses: rhysd/actionlint@v1.7.11
+
+  skip_flake:
+    name: quality/skip-flake
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Fetch full history for trend analysis
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate skip/only markers (CIG-008)
+        run: node scripts/validate-skip-only-ci.mjs
+      - name: Validate quarantine manifest (CIG-008)
+        run: node scripts/validate-quarantine.mjs
+      - name: Generate skip/flake report (CIG-008)
+        run: node scripts/generate-skip-flake-report.mjs --output quality/skip-flake-latest.json
+      - name: Upload skip/flake report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: skip-flake-report
+          path: |
+            quality/skip-flake-latest.json
+            quality/skip-flake-history/
+
+  no_new_debt:
+    name: quality/no-new-debt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Fetch full history for diff-aware checks
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build workspace packages needed by checks
+        run: pnpm --filter @laup/core --filter @laup/aider --filter @laup/claude-code --filter @laup/codex --filter @laup/copilot --filter @laup/cursor --filter @laup/opencode --filter @laup/config-hub run build
+      - name: Check no-new-debt rule (MIG-002)
+        run: node scripts/check-no-new-debt.mjs
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref || 'main' }}

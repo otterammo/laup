@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "tests": [
+    {
+      "path": "flaky-auth.test.ts",
+      "issueId": "#262",
+      "owner": "@otterammo",
+      "quarantinedAt": "2026-03-07",
+      "targetFixDate": "2026-03-21",
+      "reason": "Intermittent timeout in CI environment - investigating race condition in auth module",
+      "flakyRuns": [
+        "https://github.com/otterammo/laup/actions/runs/123456",
+        "https://github.com/otterammo/laup/actions/runs/123789"
+      ]
+    }
+  ]
+}

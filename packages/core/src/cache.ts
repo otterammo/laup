@@ -289,8 +289,6 @@ export class MemoryCache<T = unknown> implements Cache<T> {
         }
         break;
       }
-
-      case "lru":
       default: {
         // Least recently used
         let oldestAccess = Infinity;

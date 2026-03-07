@@ -220,7 +220,7 @@ export class InMemoryDbAdapter extends BaseDbAdapter {
 
     if (normalized.startsWith("create table")) {
       const match = sql.match(/create table (?:if not exists\s+)?(\w+)/i);
-      if (match && match[1]) {
+      if (match?.[1]) {
         this.tables.set(match[1], []);
       }
       return { rows: [], rowCount: 0 };
@@ -228,7 +228,7 @@ export class InMemoryDbAdapter extends BaseDbAdapter {
 
     if (normalized.startsWith("insert into")) {
       const match = sql.match(/insert into (\w+)/i);
-      if (match && match[1]) {
+      if (match?.[1]) {
         const tableName = match[1];
         const table = this.tables.get(tableName) ?? [];
         const id = (this.autoIncrement.get(tableName) ?? 0) + 1;
@@ -262,7 +262,7 @@ export class InMemoryDbAdapter extends BaseDbAdapter {
 
     if (normalized.startsWith("select")) {
       const match = sql.match(/from (\w+)/i);
-      if (match && match[1]) {
+      if (match?.[1]) {
         const table = this.tables.get(match[1]) ?? [];
         return { rows: table as T[], rowCount: table.length };
       }

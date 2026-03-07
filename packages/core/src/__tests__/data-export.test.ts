@@ -64,14 +64,17 @@ describe("data-export", () => {
 
       const lines = result.data.split("\n");
       expect(lines).toHaveLength(3);
+      expect(lines[0]).toBeDefined();
 
-      const first = JSON.parse(lines[0]!);
+      const first = JSON.parse(lines[0] as string);
       expect(first.name).toBe("Alice");
     });
 
     it("filters fields", () => {
       const result = exportToJsonl(sampleRecords, { fields: ["id"] });
-      const first = JSON.parse(result.data.split("\n")[0]!);
+      const lines = result.data.split("\n");
+      expect(lines[0]).toBeDefined();
+      const first = JSON.parse(lines[0] as string);
       expect(Object.keys(first)).toEqual(["id"]);
     });
   });
@@ -87,7 +90,9 @@ describe("data-export", () => {
 
     it("includes headers by default", () => {
       const result = exportToCsv(sampleRecords);
-      const header = result.data.split("\n")[0]!;
+      const lines = result.data.split("\n");
+      expect(lines[0]).toBeDefined();
+      const header = lines[0] as string;
       expect(header).toContain("id");
       expect(header).toContain("name");
     });
@@ -135,9 +140,8 @@ describe("data-export", () => {
     });
 
     it("throws for unsupported format", () => {
-      expect(() => exportData(sampleRecords, { format: "xml" as any })).toThrow(
-        "Unsupported format",
-      );
+      // @ts-expect-error - Testing error handling with invalid format
+      expect(() => exportData(sampleRecords, { format: "xml" })).toThrow("Unsupported format");
     });
   });
 

@@ -96,13 +96,26 @@ jobs:
           cache: "pnpm"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Dependency vulnerability scan
+      - name: Dependency vulnerability scan (CIG-005)
         run: pnpm audit --audit-level=high
+
+  secret_scan:
+    name: quality/secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Fetch full history for PR diff scanning
+      - name: Secret scan (CIG-005)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}  # Optional for gitleaks-action
 
   workflow_lint:
     name: quality/workflow-lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Lint GitHub Actions workflows
+      - name: Lint GitHub Actions workflows (CIG-005)
         uses: rhysd/actionlint@v1.7.7

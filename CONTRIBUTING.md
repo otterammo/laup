@@ -115,8 +115,9 @@ pnpm run verify:local      # Changed-scope local verification gate
 - `quality/typecheck`
 - `quality/test`
 - `quality/coverage`
-- `quality/security`
-- `quality/workflow-lint`
+- `quality/security` (CIG-005: dependency vulnerability scan)
+- `quality/secret-scan` (CIG-005: secret detection)
+- `quality/workflow-lint` (CIG-005: workflow linting)
 
 Branch protection source of truth is `.github/branch-protection.main.json`.
 Maintainers can apply it with:

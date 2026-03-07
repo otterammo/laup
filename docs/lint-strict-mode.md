@@ -1,20 +1,26 @@
-# Lint Strict Mode (CIG-002)
+# CIG-002: Lint Must Hard-Fail on Strict Diagnostics
+
+**Status:** Implemented  
+**Related Issues:** #256  
+**Implementation:** `scripts/validate-lint-warnings.mjs`
 
 ## Overview
 
-CIG-002 enforces strict lint checking where all warnings are treated as blocking errors in CI. This ensures consistent code quality and prevents warning accumulation over time.
+This requirement ensures that all lint warnings from Biome are treated as blocking
+errors unless explicitly allowed through a centrally-tracked allowlist with expiry dates.
 
 ## Requirements
 
-From challenge question Q-004:
-
-> All lint warnings are treated as blocking errors in CI (LGR-003, CIG-002). The `lint:fix` command should resolve most warnings automatically. Any warnings that cannot be auto-fixed must be addressed manually before PR approval. No lint rule exceptions are allowed without documented justification and approver sign-off in the exception config.
+1. **Strict Warning Escalation**: Biome lint step uses `--error-on-warnings` flag
+1. **Exit Code Enforcement**: Lint exits with non-zero code when strict warnings exist
+1. **Central Exception Tracking**: Migration exceptions are tracked in `.lint-warnings-allowlist.json`
+   with mandatory expiry dates and approval
 
 ## Implementation
 
-### 1. Biome Configuration
+### Biome Configuration
 
-The `biome.json` configuration enforces strict rules with recommended defaults plus custom overrides. The `lint:biome` script uses `--error-on-warnings` to ensure warnings exit non-zero.
+The `biome.json` configuration includes:
 
 ```json
 {
@@ -31,147 +37,153 @@ The `biome.json` configuration enforces strict rules with recommended defaults p
 }
 ```
 
-### 2. CI Integration
+### Package Scripts
 
-The CI workflow runs `pnpm run lint` which includes:
+- `lint:biome`: Runs `biome check . --error-on-warnings`
+- `quality:validate-lint-warnings`: Runs the validation script
 
-```bash
-pnpm run lint:machine  # Includes lint:biome with --error-on-warnings
+### Validation Script
+
+The `scripts/validate-lint-warnings.mjs` script:
+
+1. Loads `.lint-warnings-allowlist.json`
+1. Validates each entry's structure and required fields
+1. Checks that all file paths are relative (not absolute)
+1. Validates rule format is `category/ruleName`
+1. Ensures justifications are meaningful (min 10 characters)
+1. Verifies approver format (@username)
+1. Checks tracking issue format (#123)
+1. Validates that expiry dates haven't passed
+1. Ensures exception duration doesn't exceed 90 days
+1. Exits with code 1 if any validation fails
+
+### CI Integration
+
+The CI workflow (`.github/workflows/ci.yml`) includes:
+
+```yaml
+- name: Validate lint warnings allowlist (CIG-002)
+  run: pnpm run quality:validate-lint-warnings
+- name: Run lint
+  run: pnpm run lint
 ```
 
-When strict warnings exist, biome exits with non-zero status and fails the CI build.
+This ensures that:
 
-### 3. Migration Exception Tracking
+1. Allowlist structure is validated first
+1. All entries have required fields and proper format
+1. No exceptions have expired
+1. Then full lint runs with `--error-on-warnings`
+1. Any structural or expiry issues cause CI to fail
 
-During migration to strict mode, temporary exceptions can be documented in `.lint-warnings-allowlist.json`:
+## Allowlist Format
+
+File: `.lint-warnings-allowlist.json`
 
 ```json
 [
   {
-    "file": "packages/core/src/legacy-module.ts",
+    "file": "packages/core/src/example.ts",
     "rule": "suspicious/noExplicitAny",
-    "justification": "Legacy API requires dynamic typing",
+    "justification": "Legacy code from migration, tracked for refactor in Q2 2026",
     "approver": "@otterammo",
     "approvalDate": "2026-03-06",
-    "expiryDate": "2026-06-06",
-    "trackingIssue": "#300"
+    "expiryDate": "2026-06-01",
+    "trackingIssue": "#123"
   }
 ]
 ```
 
-**Schema:**
+### Required Fields
 
-- `file` (string, required): Relative path from repo root
-- `rule` (string, required): Biome rule identifier (e.g., `suspicious/noExplicitAny`)
-- `justification` (string, required): Why this exception is needed
-- `approver` (string, required): GitHub handle of approver
-- `approvalDate` (string, required): ISO 8601 date when approved
-- `expiryDate` (string, required): ISO 8601 date when exception expires
-- `trackingIssue` (string, optional): GitHub issue tracking remediation
+- **file**: Relative file path from repo root (must be relative, not absolute)
+- **rule**: Biome rule name in format `category/ruleName` (e.g., `suspicious/noExplicitAny`)
+- **justification**: Detailed explanation (minimum 10 characters) of why this exception exists
+- **approver**: GitHub username with @ prefix (e.g., `@otterammo`)
+- **approvalDate**: ISO date when exception was approved (YYYY-MM-DD)
+- **expiryDate**: ISO date by which this must be fixed (YYYY-MM-DD)
+- **trackingIssue**: GitHub issue reference in format `#123`
 
-### 4. Validation
+### Validation Rules
 
-The script `scripts/validate-lint-warnings.mjs` runs in CI to:
+- **File paths** must be relative from repo root
+- **Rule format** must be `category/ruleName`
+- **Justification** must be at least 10 characters
+- **Approver** must start with `@`
+- **Tracking issue** must be in format `#123`
+- **Exception duration** cannot exceed 90 days (from approval to expiry)
+- **Expired exceptions** are treated as violations and fail CI
 
-1. Load `.lint-warnings-allowlist.json`
-1. Verify all fields are present and valid
-1. Check no exceptions have expired
-1. Ensure tracking issues exist for each exception
-1. Fail the build if validation fails
+### Expiry Policy
 
-Run validation:
+- All exceptions **must** have an expiry date
+- Maximum exception period: **90 days**
+- Expired exceptions cause CI to fail
+- Use shorter periods for high-priority items
+
+## Usage
+
+### Checking Warnings
 
 ```bash
+# Run validation only
 pnpm run quality:validate-lint-warnings
-```
 
-### 5. Local Workflow
-
-**Before committing:**
-
-```bash
-# Auto-fix what can be fixed
-pnpm run lint:fix
-
-# Check for remaining warnings
+# Run full lint (includes validation)
 pnpm run lint
 ```
 
-**If warnings remain:**
+### Adding an Exception
 
-1. Fix the warning manually, OR
-1. Document an exception in `.lint-warnings-allowlist.json`:
-   - Get approval from a maintainer
-   - Set expiry date (max 90 days from approval)
-   - Create a tracking issue
-   - Add entry to allowlist
+1. Identify the warning from lint output
+1. Create a GitHub issue to track the resolution
+1. Get approval from a maintainer (record their GitHub username)
+1. Add entry to `.lint-warnings-allowlist.json`:
 
-**Pre-commit hook** validates that committed code has no undocumented warnings.
+```json
+{
+  "file": "packages/core/src/example.ts",
+  "rule": "correctness/noUnusedVariables",
+  "justification": "Temporary workaround for API migration to new provider interface",
+  "approver": "@maintainer-username",
+  "approvalDate": "2026-03-06",
+  "expiryDate": "2026-06-01",
+  "trackingIssue": "#256"
+}
+```
 
-## Progression
+1. Ensure expiry date is within 90 days of approval date
+1. Commit with issue reference in commit message
 
-**Current State (Phase 2):**
+### Removing an Exception
 
-- Biome runs with `--error-on-warnings`
-- Allowlist exists but may contain entries
-- CI checks are enforcing but allow temporary exceptions
+When the underlying issue is fixed:
 
-**Phase 3 (Hard-Gate):**
+1. Fix the code to eliminate the warning
+1. Remove the entry from `.lint-warnings-allowlist.json`
+1. Close the tracking issue
+1. Verify with `pnpm run lint`
 
-- `.lint-warnings-allowlist.json` should be empty or near-empty
-- All exceptions must have valid expiry dates
-- No new exceptions allowed without executive approval
-- CI fails immediately on undocumented warnings
+## Philosophy
 
-## Exception Policy
+- **Warnings are errors in disguise**: If Biome flags it, it should be fixed
+- **Exceptions are temporary**: Every exception must have a deadline (max 90 days)
+- **Visibility is critical**: All exceptions are centrally tracked and require approval
+- **Migration support**: Allowlist enables gradual migration without blocking progress
 
-### When to Request an Exception
+## Best Practices
 
-Exceptions should be **rare** and only for:
+1. **Fix first, allowlist last**: Prefer fixing warnings over adding exceptions
+1. **Short expiry dates**: Keep pressure on to resolve issues (max 90 days)
+1. **Specific entries**: One entry per file/rule combination
+1. **Update regularly**: Review allowlist monthly, remove resolved items
+1. **Link to issues**: Always reference a GitHub issue for tracking
+1. **Get approval**: All exceptions must have an approver recorded
+1. **Meaningful justifications**: Explain why the exception is needed (min 10 chars)
 
-- **Legacy code** being migrated (temporary, max 90 days)
-- **External API constraints** that force non-ideal patterns
-- **Generated code** that cannot be easily modified
-- **Deprecated code** scheduled for removal
+## Related
 
-### When NOT to Request an Exception
-
-- **Convenience** ("it's easier to ignore this")
-- **Time pressure** ("we'll fix it later")
-- **Preference** ("I don't like this rule")
-- **Lack of understanding** ("I don't know why this is a warning")
-
-### Approval Process
-
-1. Add entry to `.lint-warnings-allowlist.json` with all required fields
-1. Create PR with the exception
-1. Tag a maintainer for review and approval
-1. Maintainer validates justification and approves
-1. Exception is time-bound and must be resolved before expiry
-
-### Expiry Handling
-
-When an exception expires:
-
-1. `validate-lint-warnings.mjs` fails in CI
-1. The warning must be fixed OR
-1. A new exception must be requested with fresh justification
-1. Expiry extensions require executive approval
-
-## Integration with Other Quality Gates
-
-CIG-002 works alongside:
-
-- **LGR-003:** Pre-commit staged-file lint checking
-- **LGR-004:** Skip/only test guard
-- **CIG-003:** Coverage thresholds
-- **CIG-004:** Test hermeticity
-
-Together, these gates ensure high code quality throughout the development lifecycle.
-
-## References
-
-- **DOC-620:** Coverage threshold and quality gates overview
-- **Q-004:** Challenge question on lint warning treatment
-- **Issue #256:** CIG-002 implementation tracking
-- **LGR-003:** Local gate for lint warnings on staged files
+- **CIG-001**: Explicit PR Blocking Gate Set (branch protection) - #255
+- **LGR-004**: Skip/Only Test Guard (similar pattern for test modifiers)
+- **Q-004**: Lint Warning Allowlist Challenge Question
+- **DOC-620**: Quality Gates Implementation Guide (parent spec)

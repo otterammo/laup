@@ -4,16 +4,20 @@
     "contexts": [
       "quality/lint",
       "quality/typecheck",
-      "quality/test",
+      "quality/test (ubuntu-latest)",
+      "quality/test (macos-latest)",
       "quality/coverage",
       "quality/security",
-      "quality/workflow-lint"
+      "quality/secret-scan",
+      "quality/workflow-lint",
+      "quality/skip-flake",
+      "quality/no-new-debt"
     ]
   },
   "required_pull_request_reviews": {
-    "dismiss_stale_reviews": false,
-    "require_code_owner_reviews": false,
-    "required_approving_review_count": 1
+    "required_approving_review_count": 1,
+    "dismiss_stale_reviews": true,
+    "require_code_owner_reviews": false
   },
   "required_conversation_resolution": true
 }

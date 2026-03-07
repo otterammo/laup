@@ -4,5 +4,17 @@
     "issueId": "#246",
     "expiryDate": "2026-06-30",
     "reason": "Test file for LGR-004 skip/only validator - intentionally contains .skip/.only markers to test validation logic"
+  },
+  {
+    "path": "tests/scripts/validate-skip-only-ci.test.ts",
+    "issueId": "#262",
+    "expiryDate": "2026-06-30",
+    "reason": "Test file for CIG-008 CI skip/only validator - intentionally contains .skip/.only markers to test validation logic"
+  },
+  {
+    "path": "tests/scripts/generate-skip-flake-report.test.ts",
+    "issueId": "#262",
+    "expiryDate": "2026-06-30",
+    "reason": "Test file for CIG-008 skip/flake report generator - intentionally contains .skip/.only markers to test report generation"
   }
 ]

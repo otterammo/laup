@@ -52,6 +52,9 @@ pnpm run quality:baseline  # Generate quality/baseline.v1.json
 pnpm run quality:validate-gaps  # Validate quality gap tracking (QBASE-002)
 pnpm run quality:validate-questions  # Validate challenge questions (QBASE-003)
 pnpm run quality:check-diff-coverage  # Check diff coverage for changed lines (CIG-003)
+pnpm run quality:validate-skip-ci  # Validate skip/only markers across all tests (CIG-008)
+pnpm run quality:validate-quarantine  # Validate quarantine manifests (CIG-008)
+pnpm run quality:skip-flake-report  # Generate skip/flake metrics report (CIG-008)
 pnpm run verify:local      # Local gate for changed scope (lint + typecheck + tests)
 ```
 
@@ -74,6 +77,8 @@ See [docs/challenge-questions.md](docs/challenge-questions.md) for QBASE-003 cha
 questions that must be resolved before hard-gate rollout (Phase 3 progression).
 See [docs/coverage-threshold.md](docs/coverage-threshold.md) for CIG-003 coverage threshold
 and diff coverage gate implementation (DOC-620).
+See [docs/cig-008-skip-flake-governance.md](docs/cig-008-skip-flake-governance.md) for CIG-008
+skip/flake governance implementation with quarantine mechanism and metrics dashboard.
 See [docs/zep-compatibility.md](docs/zep-compatibility.md) for MEM-006 and MEM-007
 Zep-compatible session memory integration patterns, including transcript extraction.
 See [docs/context-packet-format.md](docs/context-packet-format.md) for HAND-001

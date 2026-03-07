@@ -26,7 +26,8 @@
     "quality:validate-gaps": "node scripts/validate-quality-gaps.mjs",
     "quality:validate-questions": "node scripts/validate-challenge-questions.mjs",
     "quality:validate-lint-warnings": "node scripts/validate-lint-warnings.mjs",
-    "quality:check-diff-coverage": "node scripts/check-diff-coverage.mjs"
+    "quality:check-diff-coverage": "node scripts/check-diff-coverage.mjs",
+    "quality:review": "node scripts/quality-review.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.6",

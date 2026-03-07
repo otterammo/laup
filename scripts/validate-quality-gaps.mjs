@@ -173,6 +173,38 @@ function isValidISODate(dateString) {
 }
 
 /**
+ * Check for overdue gaps (MIG-003)
+ */
+function checkOverdueGaps(gaps) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Normalize to midnight for date comparison
+
+  const overdueGaps = [];
+
+  for (const gap of gaps) {
+    // Only check open gaps
+    if (gap.status === "Closed") {
+      continue;
+    }
+
+    if (!gap.targetDate || !isValidISODate(gap.targetDate)) {
+      continue; // Will be caught by validation
+    }
+
+    const targetDate = new Date(gap.targetDate);
+    if (targetDate < today) {
+      const daysOverdue = Math.floor((today - targetDate) / (1000 * 60 * 60 * 24));
+      overdueGaps.push({
+        ...gap,
+        daysOverdue,
+      });
+    }
+  }
+
+  return overdueGaps;
+}
+
+/**
  * Main validation function
  */
 function main() {
@@ -203,23 +235,51 @@ function main() {
     allErrors.push(...errors);
   }
 
-  // Report results
-  if (allErrors.length === 0) {
-    console.log("✅ All quality gaps are properly tracked\n");
-    console.log("Summary:");
-    console.log(`  - All ${gaps.length} gaps have required fields`);
-    console.log("  - All severities are valid");
-    console.log("  - All target dates are valid ISO 8601 dates");
-    console.log("  - All closed gaps reference resolution PRs");
-    process.exit(0);
+  // Check for overdue gaps (MIG-003)
+  const overdueGaps = checkOverdueGaps(gaps);
+
+  // Report validation results
+  if (allErrors.length > 0) {
+    console.error("❌ Validation errors found:\n");
+    for (const error of allErrors) {
+      console.error(`  - ${error}`);
+    }
+    console.error(`\nTotal errors: ${allErrors.length}`);
+    process.exit(1);
   }
 
-  console.error("❌ Validation errors found:\n");
-  for (const error of allErrors) {
-    console.error(`  - ${error}`);
+  // Report overdue gaps
+  if (overdueGaps.length > 0) {
+    console.log("⚠️  OVERDUE GAPS DETECTED (MIG-003 Escalation Required):\n");
+    for (const gap of overdueGaps) {
+      console.log(`  🔴 ${gap.id}: ${gap.title}`);
+      console.log(`     Owner: ${gap.owner}`);
+      console.log(`     Severity: ${gap.severity}`);
+      console.log(`     Target Date: ${gap.targetDate}`);
+      console.log(`     Days Overdue: ${gap.daysOverdue}`);
+      console.log("");
+    }
+    console.log(`📋 Action Required:`);
+    console.log(`  - ${overdueGaps.length} gap(s) require escalation in weekly quality review`);
+    console.log(`  - Review and update target dates or close resolved gaps`);
+    console.log(`  - See quality/backlog.md for weekly review schedule\n`);
   }
-  console.error(`\nTotal errors: ${allErrors.length}`);
-  process.exit(1);
+
+  // Final summary
+  console.log("✅ All quality gaps are properly tracked\n");
+  console.log("Summary:");
+  console.log(`  - All ${gaps.length} gaps have required fields`);
+  console.log(`  - All severities are valid`);
+  console.log(`  - All target dates are valid ISO 8601 dates`);
+  console.log(`  - All closed gaps reference resolution PRs`);
+
+  if (overdueGaps.length > 0) {
+    console.log(`  - ⚠️  ${overdueGaps.length} gap(s) overdue (escalation required)`);
+  } else {
+    console.log(`  - ✅ No overdue gaps`);
+  }
+
+  process.exit(0);
 }
 
 main();

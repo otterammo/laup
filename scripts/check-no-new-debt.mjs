@@ -421,6 +421,8 @@ async function main() {
 }
 
 main().catch((error) => {
-  process.stderr.write(`\n❌ Fatal error: ${error instanceof Error ? error.message : String(error)}\n`);
+  process.stderr.write(
+    `\n❌ Fatal error: ${error instanceof Error ? error.message : String(error)}\n`,
+  );
   process.exit(1);
 });

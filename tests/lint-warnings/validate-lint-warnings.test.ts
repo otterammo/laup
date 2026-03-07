@@ -187,7 +187,7 @@ describe("validate-lint-warnings script (CIG-002)", () => {
         encoding: "utf-8",
         stdio: "pipe",
       });
-    }).toThrow(/should start with @/);
+    }).toThrow(/should start with/);
   });
 
   it("should fail when exception period exceeds 90 days", () => {

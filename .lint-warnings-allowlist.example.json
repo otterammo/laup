@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "file": "packages/core/src/example.ts",
+    "rule": "suspicious/noExplicitAny",
+    "justification": "Legacy code from migration, tracked for refactor in Q2 2026",
+    "approver": "@otterammo",
+    "approvalDate": "2026-03-06",
+    "expiryDate": "2026-06-01",
+    "trackingIssue": "#123"
+  }
+]

@@ -45,3 +45,6 @@ infra/data/
 
 # Misc
 .claude/
+
+# Quality reports (generated)
+.quality/

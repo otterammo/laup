@@ -27,6 +27,7 @@
     "quality:validate-questions": "node scripts/validate-challenge-questions.mjs",
     "quality:validate-lint-warnings": "node scripts/validate-lint-warnings.mjs",
     "quality:check-diff-coverage": "node scripts/check-diff-coverage.mjs",
+    "quality:review": "node scripts/quality-review.mjs",
     "quality:validate-skip-ci": "node scripts/validate-skip-only-ci.mjs",
     "quality:validate-quarantine": "node scripts/validate-quarantine.mjs",
     "quality:skip-flake-report": "node scripts/generate-skip-flake-report.mjs",

@@ -11,7 +11,7 @@ Every AI coding tool has its own config format—`CLAUDE.md`, `.cursorrules`, `.
 ## The Solution
 
 ```text
-laup.md  →  laup sync  →  CLAUDE.md        (Claude Code)
+laup.md  →  laup sync →  CLAUDE.md         (Claude Code)
                       →  .cursorrules      (Cursor)
                       →  .aider.conf.yml   (Aider)
                       →  ...
@@ -69,4 +69,3 @@ LAUP includes production-grade services for governing AI tool usage at scale:
 - [Canonical format spec](./docs/)
 - [Interactive tutorial](./scripts/tutorial.sh)
 - [Contributing guide](./CONTRIBUTING.md)
-- [CHANGELOG](./CHANGELOG.md)

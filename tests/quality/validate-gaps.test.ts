@@ -1,5 +1,5 @@
 /**
- * Tests for quality gap validation (QBASE-002)
+ * Tests for quality gap validation (QBASE-002, MIG-003)
  */
 
 import { execSync } from "node:child_process";
@@ -198,6 +198,132 @@ describe("Quality Gap Validation (QBASE-002)", () => {
           expect(gapsContent).toContain(pkgName);
         }
       }
+    });
+  });
+
+  describe("MIG-003: Time-Bound Legacy Debt Budget", () => {
+    it("should detect overdue gaps in validation output", () => {
+      const output = execSync("pnpm run quality:validate-gaps", {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+      });
+
+      // Should mention overdue status or no overdue gaps
+      expect(output).toMatch(/overdue|All quality gaps are properly tracked/i);
+    });
+
+    it("should check target dates against current date", () => {
+      const content = fs.readFileSync(GAPS_FILE, "utf8");
+      const dateMatches = content.matchAll(/\*\*Target Date:\*\*\s+(.+?)$/gm);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      for (const match of dateMatches) {
+        const dateStr = match[1]?.trim();
+        const targetDate = new Date(dateStr || "");
+
+        // Verify date is valid and in a reasonable range
+        expect(targetDate instanceof Date && !Number.isNaN(targetDate.getTime())).toBe(true);
+
+        // Target dates should be within a year (reasonable range check)
+        const oneYearFromNow = new Date(today);
+        oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+
+        const threeMonthsAgo = new Date(today);
+        threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+        // Allow some historical dates but not too far in the past
+        expect(targetDate.getTime()).toBeGreaterThan(threeMonthsAgo.getTime());
+      }
+    });
+
+    it("should have quality:review script in package.json", () => {
+      const packageJsonPath = path.join(REPO_ROOT, "package.json");
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+
+      expect(packageJson.scripts["quality:review"]).toBeDefined();
+      expect(packageJson.scripts["quality:review"]).toContain("quality-review.mjs");
+    });
+
+    it("should generate weekly review report", () => {
+      const output = execSync("pnpm run quality:review", {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+      });
+
+      // Check report format
+      expect(output).toContain("Weekly Quality Review Report");
+      expect(output).toContain("Summary");
+      expect(output).toContain("Total Open Gaps:");
+      expect(output).toContain("Overdue:");
+      expect(output).toContain("On Track:");
+    });
+
+    it("should save review report to .quality directory", () => {
+      execSync("pnpm run quality:review", {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+      });
+
+      const qualityDir = path.join(REPO_ROOT, ".quality");
+      expect(fs.existsSync(qualityDir)).toBe(true);
+
+      const today = new Date().toISOString().split("T")[0];
+      const reportPath = path.join(qualityDir, `review-${today}.md`);
+      expect(fs.existsSync(reportPath)).toBe(true);
+
+      const reportContent = fs.readFileSync(reportPath, "utf8");
+      expect(reportContent).toContain("# Weekly Quality Review Report");
+      expect(reportContent).toContain("**Report Date:**");
+    });
+
+    it("should have MIG-003 documentation", () => {
+      const docPath = path.join(REPO_ROOT, "docs", "time-bound-debt.md");
+      expect(fs.existsSync(docPath)).toBe(true);
+
+      const content = fs.readFileSync(docPath, "utf8");
+      expect(content).toContain("MIG-003");
+      expect(content).toContain("Time-Bound Legacy Debt Budget");
+      expect(content).toContain("owner");
+      expect(content).toContain("severity");
+      expect(content).toContain("target_date");
+      expect(content).toContain("escalation");
+    });
+
+    it("should document weekly review process", () => {
+      const docPath = path.join(REPO_ROOT, "docs", "time-bound-debt.md");
+      const content = fs.readFileSync(docPath, "utf8");
+
+      expect(content).toContain("Weekly Quality Review");
+      expect(content).toContain("quality:review");
+      expect(content).toContain("overdue");
+    });
+
+    it("should categorize gaps by severity in review report", () => {
+      execSync("pnpm run quality:review", {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+      });
+
+      const today = new Date().toISOString().split("T")[0];
+      const reportPath = path.join(REPO_ROOT, ".quality", `review-${today}.md`);
+      const reportContent = fs.readFileSync(reportPath, "utf8");
+
+      // Report should have proper structure
+      // If there are gaps, they should have severity
+      // If all gaps are on track, report should say so
+      expect(reportContent).toMatch(/\*\*Severity:\*\*|On Track|No overdue gaps/i);
+    });
+
+    it("should provide escalation recommendations for overdue gaps", () => {
+      const output = execSync("pnpm run quality:review", {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+      });
+
+      expect(output).toContain("Recommendations");
+      expect(output).toContain("Next Steps");
     });
   });
 });

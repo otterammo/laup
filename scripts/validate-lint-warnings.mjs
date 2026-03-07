@@ -34,11 +34,11 @@ function loadAllowlist() {
   try {
     const content = readFileSync(ALLOWLIST_PATH, "utf-8");
     const parsed = JSON.parse(content);
-    
+
     if (!Array.isArray(parsed)) {
       throw new Error("Allowlist must be an array");
     }
-    
+
     return parsed;
   } catch (error) {
     if (error.code === "ENOENT") {
@@ -59,7 +59,15 @@ function validateEntry(entry, index) {
   const entryLabel = `Entry ${index + 1}`;
 
   // Required fields
-  const requiredFields = ["file", "rule", "justification", "approver", "approvalDate", "expiryDate", "trackingIssue"];
+  const requiredFields = [
+    "file",
+    "rule",
+    "justification",
+    "approver",
+    "approvalDate",
+    "expiryDate",
+    "trackingIssue",
+  ];
   for (const field of requiredFields) {
     if (!entry[field]) {
       errors.push(`${entryLabel}: Missing required field '${field}'`);
@@ -73,7 +81,7 @@ function validateEntry(entry, index) {
 
   // Validate file path (must be relative)
   if (isAbsolute(entry.file)) {
-    errors.push(`${entryLabel}: File path must be relative, not absolute: ${entry.file}`);
+    errors.push(`${entryLabel}: File path must be a relative path, not absolute: ${entry.file}`);
   }
 
   // Validate rule format (should be category/ruleName)
@@ -83,17 +91,21 @@ function validateEntry(entry, index) {
 
   // Validate justification length
   if (entry.justification.length < MIN_JUSTIFICATION_LENGTH) {
-    errors.push(`${entryLabel}: Justification is too short (minimum ${MIN_JUSTIFICATION_LENGTH} characters)`);
+    errors.push(
+      `${entryLabel}: Justification is too short (minimum ${MIN_JUSTIFICATION_LENGTH} characters)`,
+    );
   }
 
   // Validate approver format (should start with @)
   if (!entry.approver.startsWith("@")) {
-    errors.push(`${entryLabel}: Approver should start with '@', got: ${entry.approver}`);
+    errors.push(`${entryLabel}: Approver should start with @, got: ${entry.approver}`);
   }
 
   // Validate tracking issue format (should be #123)
   if (!entry.trackingIssue.match(/^#\d+$/)) {
-    errors.push(`${entryLabel}: Tracking issue should be in format '#123', got: ${entry.trackingIssue}`);
+    errors.push(
+      `${entryLabel}: Tracking issue should be in format '#123', got: ${entry.trackingIssue}`,
+    );
   }
 
   // Validate dates
@@ -111,7 +123,9 @@ function validateEntry(entry, index) {
 
   // Check if expired
   if (expiryDate < now) {
-    errors.push(`${entryLabel}: Exception EXPIRED on ${entry.expiryDate} (file: ${entry.file}, rule: ${entry.rule})`);
+    errors.push(
+      `${entryLabel}: Exception EXPIRED on ${entry.expiryDate} (file: ${entry.file}, rule: ${entry.rule})`,
+    );
   }
 
   // Check if exception period exceeds maximum
@@ -120,7 +134,7 @@ function validateEntry(entry, index) {
 
   if (durationDays > MAX_EXCEPTION_DAYS) {
     errors.push(
-      `${entryLabel}: Exception period exceeds ${MAX_EXCEPTION_DAYS} days (${Math.round(durationDays)} days): ${entry.file}`
+      `${entryLabel}: Exception period exceeds ${MAX_EXCEPTION_DAYS} days (${Math.round(durationDays)} days): ${entry.file}`,
     );
   }
 

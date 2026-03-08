@@ -237,20 +237,20 @@ describe("No-New-Debt Rule (MIG-002)", () => {
   });
 
   describe("Environment Variables", () => {
-    it("should respect BASE_BRANCH environment variable", () => {
+    it("should accept BASE_BRANCH environment variable without crashing", () => {
+      const env = { ...process.env, BASE_BRANCH: "main" };
+      let didNotCrash = true;
       try {
         execSync("pnpm run quality:check-no-new-debt", {
           cwd: REPO_ROOT,
           encoding: "utf8",
           stdio: "pipe",
-          env: { ...process.env, BASE_BRANCH: "main" },
+          env,
         });
       } catch {
-        // May fail if there are violations - we're just testing that it runs with the env var
+        didNotCrash = false;
       }
-
-      // Test should not throw on execution error - only interested in whether it accepts the variable
-      expect(true).toBe(true);
+      expect(didNotCrash).toBe(true);
     });
   });
 

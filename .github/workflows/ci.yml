@@ -126,7 +126,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Lint GitHub Actions workflows (CIG-005)
-        uses: rhysd/actionlint@v1.7.11
+        uses: rhysd/actionlint@v1.7.12
 
   skip_flake:
     name: quality/skip-flake

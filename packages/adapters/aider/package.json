@@ -25,6 +25,6 @@
   },
   "dependencies": {
     "@laup/core": "workspace:*",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.2.0"
   }
 }
